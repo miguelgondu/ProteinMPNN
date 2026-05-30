@@ -10,6 +10,9 @@ import typer
 from proteinmpnn.cli import app
 from proteinmpnn.cli.output import write_probs_csv, write_probs_npz
 from proteinmpnn.inference import InferenceRunner
+from proteinmpnn.utils.logging import get_logger
+
+logger = get_logger("cli.compute_probs")
 
 
 @app.command()
@@ -77,11 +80,11 @@ def compute_probs(
     output.mkdir(parents=True, exist_ok=True)
 
     # Create runner and compute probabilities
-    typer.echo(f"Loading model {model_name}...")
+    logger.info("Loading model %s...", model_name)
     runner = InferenceRunner(model_name=model_name)
 
     mode_str = "unconditional" if unconditional else "conditional"
-    typer.echo(f"Computing {mode_str} probabilities for {pdb_path.name}...")
+    logger.info("Computing %s probabilities for %s...", mode_str, pdb_path.name)
 
     result = runner.compute_probs(
         pdb_path=pdb_path,
@@ -93,15 +96,16 @@ def compute_probs(
     # Write outputs
     csv_path = output / f"{pdb_path.stem}_probs.csv"
     write_probs_csv(result, csv_path)
-    typer.echo(f"Wrote CSV to {csv_path}")
+    logger.info("Wrote CSV to %s", csv_path)
 
     npz_path = output / f"{pdb_path.stem}_probs.npz"
     write_probs_npz(result, npz_path)
-    typer.echo(f"Wrote NPZ to {npz_path}")
+    logger.info("Wrote NPZ to %s", npz_path)
 
     # Print summary
-    typer.echo(
-        f"\nComputed {mode_str} log probabilities for "
-        f"{len(result.residue_info)} residues"
+    logger.info(
+        "Computed %s log probabilities for %d residues",
+        mode_str,
+        len(result.residue_info),
     )
-    typer.echo(f"Log probability matrix shape: {result.log_probs.shape}")
+    logger.info("Log probability matrix shape: %s", result.log_probs.shape)

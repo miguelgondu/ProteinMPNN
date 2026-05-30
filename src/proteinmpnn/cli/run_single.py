@@ -10,6 +10,9 @@ import typer
 from proteinmpnn.cli import app
 from proteinmpnn.cli.output import write_af2_csv, write_fasta
 from proteinmpnn.inference import InferenceRunner
+from proteinmpnn.utils.logging import get_logger
+
+logger = get_logger("cli.run_single")
 
 
 @app.command()
@@ -115,13 +118,13 @@ def run_single(
     output.mkdir(parents=True, exist_ok=True)
 
     # Create runner and generate sequences
-    typer.echo(f"Loading model {model_name}...")
+    logger.info("Loading model %s...", model_name)
     runner = InferenceRunner(
         model_name=model_name,
         backbone_noise=backbone_noise,
     )
 
-    typer.echo(f"Designing sequences for {pdb_path.name}...")
+    logger.info("Designing sequences for %s...", pdb_path.name)
     result = runner.design_single(
         pdb_path=pdb_path,
         designable_res=designable_residues,
@@ -137,14 +140,14 @@ def run_single(
     # Write outputs
     fasta_path = output / f"{pdb_path.stem}.fasta"
     write_fasta(result, fasta_path)
-    typer.echo(f"Wrote {len(result.sequences) + 1} sequences to {fasta_path}")
+    logger.info("Wrote %d sequences to %s", len(result.sequences) + 1, fasta_path)
 
     if af2:
         csv_path = output / f"{pdb_path.stem}.csv"
         write_af2_csv(result, csv_path)
-        typer.echo(f"Wrote AlphaFold2 CSV to {csv_path}")
+        logger.info("Wrote AlphaFold2 CSV to %s", csv_path)
 
     # Print summary
-    typer.echo(f"\nNative sequence score: {result.native.score:.4f}")
+    logger.info("Native sequence score: %.4f", result.native.score)
     best_score = min(s.score for s in result.sequences)
-    typer.echo(f"Best designed sequence score: {best_score:.4f}")
+    logger.info("Best designed sequence score: %.4f", best_score)

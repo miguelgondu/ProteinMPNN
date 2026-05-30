@@ -7,7 +7,7 @@ from typing import Any
 from proteinmpnn.utils.logging import get_logger
 from proteinmpnn.utils.pdb import parse_PDB
 
-logger = get_logger(f"ProteinMPNN.{__file__}")
+logger = get_logger("data.structure.dataset")
 
 
 class StructureDataset:
@@ -41,7 +41,7 @@ class StructureDataset:
                     else:
                         discard_count["too_long"] += 1
                 else:
-                    logger.info(name, bad_chars, entry["seq"])
+                    logger.info("Bad chars in %s: %s (seq: %s)", name, bad_chars, seq)
                     discard_count["bad_chars"] += 1
 
                 # Truncate early
@@ -54,7 +54,7 @@ class StructureDataset:
                         f"{len(self.data)} entries ({i + 1} loaded) in {elapsed:.1f} s"
                     )
 
-            logger.info("Discarded during loading: ", discard_count)
+            logger.info("Discarded during loading: %s", discard_count)
 
     def __len__(self):
         return len(self.data)
@@ -101,7 +101,7 @@ class StructureDatasetPDB:
                     f"{len(self.data)} entries ({i + 1} loaded) in {elapsed:.1f} s"
                 )
 
-        logger.info("Discarded during loading: ", discard_count)
+        logger.info("Discarded during loading: %s", discard_count)
 
     def __len__(self):
         return len(self.data)

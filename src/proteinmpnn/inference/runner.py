@@ -26,9 +26,12 @@ from proteinmpnn.model.proteinmpnn import (
 )
 from proteinmpnn.model.utils import _S_to_seq
 from proteinmpnn.utils.constants import HIDDEN_DIM, NUM_LAYERS, WEIGHTS_PATH
+from proteinmpnn.utils.logging import get_logger
 
 if TYPE_CHECKING:
     from proteinmpnn.data.config import SingleStateConfig
+
+logger = get_logger("inference.runner")
 
 # Type alias for model names
 ModelName = Literal[
@@ -86,9 +89,11 @@ class InferenceRunner:
                 self.device = torch.device("cpu")
         else:
             self.device = device
+        logger.debug("Using device: %s", self.device)
 
         # Load model
         self.model = self._load_model()
+        logger.info("Model %s loaded successfully", model_name)
 
     def _load_model(self) -> ProteinMPNN:
         """Load the ProteinMPNN model from checkpoint."""
@@ -99,6 +104,7 @@ class InferenceRunner:
                 f"Please ensure the model weights are downloaded."
             )
 
+        logger.debug("Loading checkpoint from %s", ckpt_path)
         ckpt = torch.load(ckpt_path, map_location=self.device, weights_only=False)
         num_edges = ckpt["num_edges"]
 
@@ -218,6 +224,13 @@ class InferenceRunner:
         if protein is None:
             raise ValueError(f"Could not find protein {pdb_path.stem} in dataset")
 
+        logger.debug(
+            "Running inference: %d sequences, batch_size=%d, temps=%s",
+            num_sequences,
+            batch_size,
+            temperatures,
+        )
+
         # Run inference
         return self._run_inference(
             protein=protein,
@@ -278,6 +291,9 @@ class InferenceRunner:
 
         # If no designable residues specified, compute for all residues
         all_residues = not designable_res
+
+        mode_str = "unconditional" if unconditional else "conditional"
+        logger.debug("Computing %s probabilities for %s", mode_str, pdb_path.stem)
 
         return self._compute_probs_internal(
             protein=protein,
@@ -408,6 +424,11 @@ class InferenceRunner:
                 pos_in_protein += 1
 
         mode = "unconditional" if unconditional else "conditional"
+        logger.debug(
+            "Computed %s log probabilities for %d residues",
+            mode,
+            len(residue_info),
+        )
 
         return ConditionalProbsResult(
             protein_name=name_,
@@ -490,6 +511,7 @@ class InferenceRunner:
         name_ = batch_clones[0]["name"]
 
         # Run inference
+        logger.info("Computing native sequence score...")
         with torch.no_grad():
             # Compute native score
             randn_1 = torch.randn(chain_M.shape, device=X.device)
@@ -505,13 +527,21 @@ class InferenceRunner:
             mask_for_loss = mask * chain_M * chain_M_pos
             native_scores, _ = _scores(S, log_probs, mask_for_loss)
             native_score = native_scores.cpu().data.numpy().mean()
+            logger.debug("Native score: %.4f", native_score)
 
             # Storage for results
             sequences: list[SequenceResult] = []
             probs_list: list[np.ndarray] = []
 
             # Generate sequences
+            logger.info(
+                "Generating %d sequences (%d batches x %d per batch)...",
+                num_sequences,
+                num_batches,
+                batch_copies,
+            )
             for temp in temperatures:
+                logger.debug("Sampling at temperature %.2f", temp)
                 for j in range(num_batches):
                     randn_2 = torch.randn(chain_M.shape, device=X.device)
 
@@ -685,6 +715,8 @@ class InferenceRunner:
             probs = None
             if dump_probs and probs_list:
                 probs = np.squeeze(np.mean(np.stack(probs_list), axis=0), axis=0)
+
+            logger.info("Generated %d sequences", len(sequences))
 
             return DesignResult(
                 protein_name=name_,
