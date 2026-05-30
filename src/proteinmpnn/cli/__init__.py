@@ -1,21 +1,22 @@
+"""CLI for ProteinMPNN."""
+
 from pathlib import Path
 from typing import Annotated, Literal
 
-import numpy as np
-import torch
 import typer
 
-from proteinmpnn.data.single_state import SingleStateDesignInput
-from proteinmpnn.data.structure.dataset import StructureDatasetPDB
-from proteinmpnn.model.proteinmpnn import ProteinMPNN
-from proteinmpnn.utils.constants import AA, HIDDEN_DIM, NUM_LAYERS, WEIGHTS_PATH
+from proteinmpnn.cli.output import write_af2_csv, write_fasta
+from proteinmpnn.inference import InferenceRunner
 
-app = typer.Typer()
+app = typer.Typer(
+    no_args_is_help=True,
+    add_completion=False,
+)
 
 
 @app.command()
 def run_single(
-    pdb_path: Path,
+    pdb_path: Annotated[Path, typer.Argument(help="Path to the input PDB file")],
     model_name: Annotated[
         Literal[
             "v_48_002",
@@ -30,64 +31,125 @@ def run_single(
             "s_48_020",
             "s_48_030",  # soluble models
         ],
-        typer.Option,
+        typer.Option("--model", "-m", help="ProteinMPNN model to use"),
     ] = "v_48_020",
-    designable_residues: str = "",
-    symmetric_residues: str = "",
-    cluster_center: str = "",
-    cluster_radius: float = 10.0,  # TODO(miguel): Which units?
-    backbone_noise: float = 0.0,
-    num_seq_per_target: int = 5,
-    batch_size: int = 1,
-    temperature: float = 0.1,
-):
-    ckpt_path = WEIGHTS_PATH / f"{model_name}.pt"
+    designable_residues: Annotated[
+        str,
+        typer.Option(
+            "--design",
+            "-d",
+            help="Designable residues (e.g., 'A1-A68' or 'A10,A12-A15')",
+        ),
+    ] = "",
+    symmetric_residues: Annotated[
+        str,
+        typer.Option(
+            "--symmetric",
+            "-s",
+            help="Symmetric residue pairs (e.g., 'A10:B10,A11:B11')",
+        ),
+    ] = "",
+    cluster_center: Annotated[
+        str,
+        typer.Option(
+            "--cluster",
+            "-c",
+            help="Cluster center residue(s) for radius-based selection",
+        ),
+    ] = "",
+    cluster_radius: Annotated[
+        float,
+        typer.Option("--radius", "-r", help="Cluster radius in Angstroms"),
+    ] = 10.0,
+    backbone_noise: Annotated[
+        float,
+        typer.Option("--noise", help="Backbone noise standard deviation"),
+    ] = 0.0,
+    num_seq_per_target: Annotated[
+        int,
+        typer.Option("-n", "--num-seqs", help="Number of sequences to generate"),
+    ] = 5,
+    batch_size: Annotated[
+        int,
+        typer.Option("--batch", "-b", help="Batch size for generation"),
+    ] = 1,
+    temperature: Annotated[
+        str,
+        typer.Option(
+            "--temp",
+            "-t",
+            help="Sampling temperature(s), space-separated (e.g., '0.1 0.2')",
+        ),
+    ] = "0.1",
+    output: Annotated[
+        Path | None,
+        typer.Option(
+            "--output",
+            "-o",
+            help="Output directory (defaults to PDB directory)",
+        ),
+    ] = None,
+    af2: Annotated[
+        bool,
+        typer.Option("--af2", help="Also output AlphaFold2-format CSV"),
+    ] = False,
+    seed: Annotated[
+        int | None,
+        typer.Option("--seed", help="Random seed for reproducibility"),
+    ] = None,
+) -> None:
+    """Design sequences for a single protein structure.
 
-    if not ckpt_path.exists():
-        raise ValueError("...")
+    Example usage:
 
-    omit_AAs = np.array([A == "X" for A in AA]).astype(np.float32)
+        proteinmpnn run-single 6MRR.pdb --design A1-A68 -n 10
 
-    pdbs_dataset = StructureDatasetPDB.from_pdb_dir(pdb_path.parent)
-    residue_designability = SingleStateDesignInput(
-        pdb_path,
+        proteinmpnn run-single 4GYT.pdb --design A7-A183,B7-B183 \\
+            --symmetric A7-A183:B7-B183
+
+    """
+    # Parse temperatures
+    temperatures = [float(t) for t in temperature.split()]
+
+    # Determine output directory
+    if output is None:
+        output = pdb_path.parent
+    output.mkdir(parents=True, exist_ok=True)
+
+    # Create runner and generate sequences
+    typer.echo(f"Loading model {model_name}...")
+    runner = InferenceRunner(
+        model_name=model_name,
+        backbone_noise=backbone_noise,
+    )
+
+    typer.echo(f"Designing sequences for {pdb_path.name}...")
+    result = runner.design_single(
+        pdb_path=pdb_path,
         designable_res=designable_residues,
-        default_design_setting="all",
         symmetric_res=symmetric_residues,
         cluster_center=cluster_center,
         cluster_radius=cluster_radius,
+        num_sequences=num_seq_per_target,
+        batch_size=batch_size,
+        temperatures=temperatures,
+        seed=seed,
     )
 
-    ckpt = torch.load(
-        ckpt_path,
-        map_location=(
-            device := (
-                torch.device("cuda")
-                if torch.cuda.is_available()
-                else (
-                    torch.device("mps")
-                    if torch.mps.is_available()
-                    else torch.device("cpu")
-                )
-            )
-        ),
-    )
-    num_edges = ckpt["num_edges"]
-    model = ProteinMPNN(
-        num_letters=21,
-        node_features=HIDDEN_DIM,
-        edge_features=HIDDEN_DIM,
-        hidden_dim=HIDDEN_DIM,
-        num_encoder_layers=NUM_LAYERS,
-        num_decoder_layers=NUM_LAYERS,
-        augment_eps=backbone_noise,
-        k_neighbors=num_edges,
-    )
-    model.to(device)
-    model.load_state_dict(ckpt["model_state_dict"])
-    model.eval()
+    # Write outputs
+    fasta_path = output / f"{pdb_path.stem}.fasta"
+    write_fasta(result, fasta_path)
+    typer.echo(f"Wrote {len(result.sequences) + 1} sequences to {fasta_path}")
 
-    print(model)
+    if af2:
+        csv_path = output / f"{pdb_path.stem}.csv"
+        write_af2_csv(result, csv_path)
+        typer.echo(f"Wrote AlphaFold2 CSV to {csv_path}")
+
+    # Print summary
+    typer.echo(f"\nNative sequence score: {result.native.score:.4f}")
+    best_score = min(s.score for s in result.sequences)
+    typer.echo(f"Best designed sequence score: {best_score:.4f}")
 
 
 if __name__ == "__main__":

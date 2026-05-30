@@ -274,7 +274,8 @@ def parse_PDB(path_to_pdb, input_chain_list=None):
             xyz, seq = parse_PDB_biounits(
                 biounit, atoms=["N", "CA", "C", "O"], chain=letter
             )
-            if not isinstance(xyz, str):
+            # Check for valid chain: not a string and has a non-empty sequence
+            if not isinstance(xyz, str) and seq[0]:
                 concat_seq += seq[0]
                 my_dict["seq_chain_" + letter] = seq[0]
                 coords_dict_chain = {}

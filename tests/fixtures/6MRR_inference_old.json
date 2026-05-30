@@ -1,0 +1,39 @@
+{
+  "description": "Inference output for 6MRR A1-A68 with seed=42, verified against old run_protein_mpnn.py logic",
+  "seed": 42,
+  "model_name": "v_48_020",
+  "designable_res": "A1-A68",
+  "native": {
+    "name": "6MRR",
+    "score": 1.4924464225769043,
+    "fixed_chains": [],
+    "designed_chains": [
+      "A"
+    ],
+    "model_name": "v_48_020",
+    "sequence": "GWSTELEKHREELKEFLKKEGITNVEIRIDNGRLEVRVEGGTERLKRFLEELRQKLEKKGYTVDIKIE"
+  },
+  "sequences": [
+    {
+      "temperature": 0.1,
+      "sample_index": 0,
+      "score": 1.0267943143844604,
+      "seq_recovery": 0.529411792755127,
+      "sequence": "GTDEELEKVVKELKAFLKKKGITNVKIKVENGTLTITMNGASEETKNFLENLKKELEAKGYKVNITIK"
+    },
+    {
+      "temperature": 0.1,
+      "sample_index": 0,
+      "score": 0.9342713952064514,
+      "seq_recovery": 0.529411792755127,
+      "sequence": "GMDEELEKYVEELKKFLKEKGITNVKIEVKDGVLTITMNGADEETKKFLEELKKELEKKGYKVNVEIK"
+    },
+    {
+      "temperature": 0.1,
+      "sample_index": 0,
+      "score": 0.9591245055198669,
+      "seq_recovery": 0.529411792755127,
+      "sequence": "GMDEELEKYVEELKAFLEKEGIDNVKIKVEDGVLTIEMKGASEETKKFLEELKKELEAKGYKVEVKIY"
+    }
+  ]
+}
