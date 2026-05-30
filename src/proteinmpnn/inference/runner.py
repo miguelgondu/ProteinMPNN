@@ -404,7 +404,7 @@ class InferenceRunner:
                             torch.sum(
                                 torch.nn.functional.one_hot(S[b_ix], 21)
                                 * torch.nn.functional.one_hot(S_sample[b_ix], 21),
-                                axis=-1,
+                                dim=-1,
                             )
                             * mask_for_loss[b_ix]
                         ) / torch.sum(mask_for_loss[b_ix])
