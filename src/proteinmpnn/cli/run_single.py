@@ -2,16 +2,14 @@
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING, Annotated, Literal
+from pathlib import Path  # noqa: TC003
+from typing import Annotated, Literal
 
 import typer
 
 from proteinmpnn.cli import app
 from proteinmpnn.cli.output import write_af2_csv, write_fasta
 from proteinmpnn.inference import InferenceRunner
-
-if TYPE_CHECKING:
-    from pathlib import Path
 
 
 @app.command()

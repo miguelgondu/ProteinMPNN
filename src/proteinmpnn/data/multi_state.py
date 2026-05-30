@@ -18,11 +18,14 @@ from proteinmpnn.utils.pdb import (
     check_structure_bounds,
     get_neighbors_within_radius,
 )
+from proteinmpnn.utils.logging import get_logger
 from proteinmpnn.utils.residue import (
     parse_residue,
     parse_residue_range,
     validate_symmetric_groups,
 )
+
+logger = get_logger("data.multi_state")
 
 if TYPE_CHECKING:
     from collections.abc import Sequence
@@ -196,7 +199,7 @@ class MultiStateDesignInput:
 
             # Skip validation if disabled
             if validation_tries == 0:
-                print("Skipping validation - Multi-state integration complete!")
+                logger.info("Skipping validation - Multi-state integration complete!")
                 break
 
             # Check for clashes between states
@@ -209,7 +212,7 @@ class MultiStateDesignInput:
                     raise RuntimeError(
                         "Multi-state integration failed: clashes between states."
                     )
-                print("Multi-state integration failed (clashes) - retrying...")
+                logger.warning("Multi-state integration failed (clashes) - retrying...")
 
         # Save combined PDB
         msd_dir = self.pdb_dir / "msd"
@@ -218,7 +221,7 @@ class MultiStateDesignInput:
 
         if validation_tries > 0:
             check_structure_bounds(target)
-            print(f"Multi-state integration validated! Saving at: {msd_pdb}")
+            logger.info("Multi-state integration validated! Saving at: %s", msd_pdb)
 
         io.set_structure(target)
         io.save(str(msd_pdb), select=NotDisordered())

@@ -6,6 +6,10 @@ from pathlib import Path
 import numpy as np
 import torch
 
+from proteinmpnn.utils.logging import get_logger
+
+logger = get_logger("sample.metropolis")
+
 
 def BPs_to_AAs(fwd_sequence, rev_sequence, num_codons, shift):
     aa_list1, aa_list2 = [], []
@@ -352,13 +356,17 @@ def score(
         pass
 
     if debug:
-        print(
-            f"[DEBUG] fwd_idx={fwd_idx}, fwd_codon={seq1[fwd_idx*3:fwd_idx*3+3]}, "
-            f"sa1={sa1[fwd_idx]}"
+        logger.debug(
+            "fwd_idx=%d, fwd_codon=%s, sa1=%s",
+            fwd_idx,
+            seq1[fwd_idx * 3 : fwd_idx * 3 + 3],
+            sa1[fwd_idx],
         )
-        print(
-            f"[DEBUG] rev_idx={rev_idx}, rev_codon={seq2[rev_idx*3:rev_idx*3+3]}, "
-            f"sa2={sa2[rev_idx]}"
+        logger.debug(
+            "rev_idx=%d, rev_codon=%s, sa2=%s",
+            rev_idx,
+            seq2[rev_idx * 3 : rev_idx * 3 + 3],
+            sa2[rev_idx],
         )
 
     return sa1, sa2
@@ -598,7 +606,7 @@ def na_sample(probs1, probs2):
                     )
                     metro_used += 1
             if torch.isinf(score1) or torch.isinf(score2):
-                print("A sequence has a stop codon during iter {i}")
+                logger.warning("A sequence has a stop codon during iter %d", i)
 
         # Format sequence into final (transcribed) format
         final_AAs1, final_AAs2 = BPs_to_AAs(
@@ -622,14 +630,14 @@ def na_sample(probs1, probs2):
         rounds += 1
 
     elapsed = time.time() - tick
-    print(f"Finished after {rounds} rounds:")
-    print(f"Final Scores: {score1}, {score2}")
-    print(f"Final AAs: {final_AAs1}, {final_AAs2}")
-    print(f"Fwd Sequence (5p to 3p): {fwd_sequence}")
-    print(f"Rev Sequence (5p to 3p): {rev_sequence[::-1]}")
-    print(f"MCMC Runtime: {round(elapsed, 0)}s")
-    print(f"Best Iteration: {best_iter}")
-    print(f"Metropolis Used: {metro_used}")
+    logger.info("Finished after %d rounds:", rounds)
+    logger.info("Final Scores: %s, %s", score1, score2)
+    logger.info("Final AAs: %s, %s", final_AAs1, final_AAs2)
+    logger.info("Fwd Sequence (5p to 3p): %s", fwd_sequence)
+    logger.info("Rev Sequence (5p to 3p): %s", rev_sequence[::-1])
+    logger.info("MCMC Runtime: %ds", round(elapsed, 0))
+    logger.info("Best Iteration: %d", best_iter)
+    logger.info("Metropolis Used: %d", metro_used)
 
     append_to_csv(
         "mpnn_results.csv",
@@ -688,9 +696,9 @@ def load_flags(file_path: str | Path):
                         value = float(value)
                 args[key] = value
     except FileNotFoundError:
-        print(f"Error: Flags file '{file_path}' not found.")
+        logger.error("Flags file '%s' not found.", file_path)
     except Exception as e:
-        print(f"Error reading flags file '{file_path}': {e}")
+        logger.error("Error reading flags file '%s': %s", file_path, e)
     return args
 
 
@@ -753,12 +761,19 @@ def run_metropolis_from_flags(flags_file):
     # be ~300x the number of Amino Acids
     metropolis = args.get("metropolis", False)  # Use the Metropolis Algorithm
 
-    print("Using Updated Version of Metropolis Sampler")
-    print(
-        f"Running metropolis with strand={strand}, shift={shift}, "
-        f"temperature={temperature}, use_gradient={use_gradient}, "
-        f"gradient_start={gradient_start}, gradient_end={gradient_end}, "
-        f"num_mutations={num_mutations}, metropolis={metropolis}"
+    logger.info("Using Updated Version of Metropolis Sampler")
+    logger.info(
+        "Running metropolis with strand=%s, shift=%d, temperature=%s, "
+        "use_gradient=%s, gradient_start=%s, gradient_end=%s, "
+        "num_mutations=%d, metropolis=%s",
+        strand,
+        shift,
+        temperature,
+        use_gradient,
+        gradient_start,
+        gradient_end,
+        num_mutations,
+        metropolis,
     )
     return (
         strand,

@@ -21,6 +21,9 @@ from proteinmpnn.model.utils import (
     cat_neighbors_nodes,
     gather_nodes,
 )
+from proteinmpnn.utils.logging import get_logger
+
+logger = get_logger("model.proteinmpnn")
 
 
 class ProteinMPNN(nn.Module):
@@ -279,9 +282,7 @@ class ProteinMPNN(nn.Module):
             chain_mask_gathered = torch.gather(chain_mask, 1, t[:, None])  # [B]
             bias_by_res_gathered = torch.gather(
                 bias_by_res, 1, t[:, None, None].repeat(1, 1, 21)
-            )[
-                :, 0, :
-            ]  # [B, 21]
+            )[:, 0, :]  # [B, 21]
             if (chain_mask_gathered == 0).all():
                 S_t = torch.gather(S_true, 1, t[:, None])
             else:
@@ -357,16 +358,14 @@ class ProteinMPNN(nn.Module):
                         pssm_log_odds_mask,
                         1,
                         t[:, None, None].repeat(1, 1, pssm_log_odds_mask.shape[-1]),
-                    )[
-                        :, 0
-                    ]  # [B, 21]
+                    )[:, 0]  # [B, 21]
                     probs_masked = probs * pssm_log_odds_mask_gathered
                     probs_masked += probs * 0.001
                     probs = probs_masked / torch.sum(
                         probs_masked, dim=-1, keepdim=True
                     )  # [B, 21]
                 if invert_probs:
-                    print(constant.shape)
+                    logger.debug("constant.shape: %s", constant.shape)
                     probs = (1.0 / (probs + 1e-12)) * (1.0 - constant[None, :])
                     probs = probs / torch.sum(probs)
                 if omit_AA_mask_flag:
@@ -374,9 +373,7 @@ class ProteinMPNN(nn.Module):
                         omit_AA_mask,
                         1,
                         t[:, None, None].repeat(1, 1, omit_AA_mask.shape[-1]),
-                    )[
-                        :, 0
-                    ]  # [B, 21]
+                    )[:, 0]  # [B, 21]
                     probs_masked = probs * (1.0 - omit_AA_mask_gathered)
                     probs = probs_masked / torch.sum(
                         probs_masked, dim=-1, keepdim=True
@@ -485,11 +482,7 @@ class ProteinMPNN(nn.Module):
                     new_decoding_order.append([t_dec])
         decoding_order = torch.tensor(
             list(itertools.chain(*new_decoding_order)), device=device
-        )[
-            None,
-        ].repeat(
-            X.shape[0], 1
-        )
+        )[None,].repeat(X.shape[0], 1)
         mask_size = E_idx.shape[1]
         permutation_matrix_reverse = torch.nn.functional.one_hot(
             decoding_order, num_classes=mask_size
@@ -630,12 +623,12 @@ class ProteinMPNN(nn.Module):
                     try:
                         S_t_repeat = torch.multinomial(flat_probs, 1).squeeze(-1)
                     except RuntimeError:
-                        print(
-                            "*** Invalid multinomial distribution (sum of probabilities"
-                            " <= 0). This means there is NO valid bidirect. AA combo"
-                            " to choose from - check your AA constraints  ***"
+                        logger.error(
+                            "Invalid multinomial distribution (sum of probabilities "
+                            "<= 0). This means there is NO valid bidirect. AA combo "
+                            "to choose from - check your AA constraints"
                         )
-                        quit()
+                        raise SystemExit(1)
                     # extract idx of each AA from prob sampling by reverse-engineering
                     # the flatten operation
                     prob_b = S_t_repeat % p_shape[0]
@@ -957,7 +950,7 @@ class ProteinMPNN(nn.Module):
         output_dict_list = []
         log_probs_list = []
 
-        print(f"{prod.shape[0]} pair permutations to sample!")
+        logger.info("%d pair permutations to sample!", prod.shape[0])
         # iterate through each permutation and run decoding on only these two positions
         for p_ix in range(prod.shape[0]):
             perm = prod[p_ix, :]  # [2,]
@@ -1012,9 +1005,7 @@ class ProteinMPNN(nn.Module):
                 chain_mask_gathered = torch.gather(chain_mask, 1, t[:, None])  # [B]
                 bias_by_res_gathered = torch.gather(
                     bias_by_res, 1, t[:, None, None].repeat(1, 1, 21)
-                )[
-                    :, 0, :
-                ]  # [B, 21]
+                )[:, 0, :]  # [B, 21]
                 if (
                     chain_mask_gathered == 0
                 ).all():  # if position is fixed, just fill in sequence
@@ -1100,16 +1091,14 @@ class ProteinMPNN(nn.Module):
                             pssm_log_odds_mask,
                             1,
                             t[:, None, None].repeat(1, 1, pssm_log_odds_mask.shape[-1]),
-                        )[
-                            :, 0
-                        ]  # [B, 21]
+                        )[:, 0]  # [B, 21]
                         probs_masked = probs * pssm_log_odds_mask_gathered
                         probs_masked += probs * 0.001
                         probs = probs_masked / torch.sum(
                             probs_masked, dim=-1, keepdim=True
                         )  # [B, 21]
                     if invert_probs:
-                        print(constant.shape)
+                        logger.debug("constant.shape: %s", constant.shape)
                         probs = (1.0 / (probs + 1e-12)) * (1.0 - constant[None, :])
                         probs = probs / torch.sum(probs)
                     if omit_AA_mask_flag:
@@ -1117,9 +1106,7 @@ class ProteinMPNN(nn.Module):
                             omit_AA_mask,
                             1,
                             t[:, None, None].repeat(1, 1, omit_AA_mask.shape[-1]),
-                        )[
-                            :, 0
-                        ]  # [B, 21]
+                        )[:, 0]  # [B, 21]
                         probs_masked = probs * (1.0 - omit_AA_mask_gathered)
                         probs = probs_masked / torch.sum(
                             probs_masked, dim=-1, keepdim=True
