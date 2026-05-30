@@ -11,7 +11,13 @@ import torch
 
 from proteinmpnn.data.single_state import SingleStateDesignInput
 from proteinmpnn.data.structure.dataset import StructureDatasetPDB
-from proteinmpnn.inference.results import DesignResult, NativeSequence, SequenceResult
+from proteinmpnn.inference.results import (
+    ConditionalProbsResult,
+    DesignResult,
+    NativeSequence,
+    ResidueInfo,
+    SequenceResult,
+)
 from proteinmpnn.inference.transform import transform_inputs
 from proteinmpnn.model.featurize import tied_featurize
 from proteinmpnn.model.losses import _scores
@@ -220,6 +226,195 @@ class InferenceRunner:
             batch_size=batch_size,
             temperatures=temperatures,
             dump_probs=dump_probs,
+        )
+
+    def compute_probs(
+        self,
+        pdb_path: str | Path,
+        designable_res: str = "",
+        unconditional: bool = False,
+        seed: int | None = None,
+    ) -> ConditionalProbsResult:
+        """Compute conditional or unconditional log probabilities per residue.
+
+        Args:
+            pdb_path: Path to the input PDB file.
+            designable_res: Comma-separated residue specifications for conditional
+                mode (e.g., "A10,A12-A15"). If empty and conditional mode,
+                all residues are included.
+            unconditional: If True, compute unconditional probabilities (no
+                sequence context). If False, compute conditional probabilities.
+            seed: Random seed for reproducibility.
+
+        Returns:
+            ConditionalProbsResult containing log probabilities and residue info.
+        """
+        pdb_path = Path(pdb_path)
+
+        # Set seed for reproducibility
+        if seed is not None:
+            torch.manual_seed(seed)
+
+        # Create design input specification
+        design_input = SingleStateDesignInput(
+            pdb_path=pdb_path,
+            designable_res=designable_res,
+            default_design_setting="all",
+        )
+        config = design_input.to_config()
+
+        # Load protein structure
+        pdb_dataset = StructureDatasetPDB.from_pdb_dir(pdb_path.parent)
+
+        # Find the protein matching our PDB
+        protein = None
+        for p in pdb_dataset:
+            if p["name"] == pdb_path.stem:
+                protein = p
+                break
+
+        if protein is None:
+            raise ValueError(f"Could not find protein {pdb_path.stem} in dataset")
+
+        # If no designable residues specified, compute for all residues
+        all_residues = not designable_res
+
+        return self._compute_probs_internal(
+            protein=protein,
+            config=config,
+            unconditional=unconditional,
+            all_residues=all_residues,
+        )
+
+    def _compute_probs_internal(
+        self,
+        protein: dict,
+        config: SingleStateConfig,
+        unconditional: bool,
+        all_residues: bool = False,
+    ) -> ConditionalProbsResult:
+        """Internal method for computing probabilities.
+
+        Args:
+            protein: Protein dictionary from StructureDatasetPDB.
+            config: SingleStateConfig with design specifications.
+            unconditional: If True, compute unconditional probabilities.
+            all_residues: If True, compute probs for all residues regardless
+                of config.designable.
+
+        Returns:
+            ConditionalProbsResult with log probabilities.
+        """
+        # Transform config into model input dictionaries
+        (
+            chain_id_dict,
+            fixed_positions_dict,
+            _,  # pssm_dict
+            _,  # omit_aa_dict
+            _,  # bias_aa_dict
+            _,  # tied_positions_dict
+            _,  # bias_by_res_dict
+        ) = transform_inputs(config, protein)
+
+        # If computing for all residues, don't use fixed positions
+        if all_residues:
+            fixed_positions_dict = None
+
+        # Create single-item batch
+        batch = [copy.deepcopy(protein)]
+
+        # Featurize - when all_residues is True and chain_id_dict is None,
+        # all chains will be treated as "masked" (designable)
+        (
+            X,
+            S,
+            mask,
+            _,  # lengths
+            chain_M,
+            chain_encoding_all,
+            letter_list_list,
+            _,  # visible_list_list
+            _,  # masked_list_list
+            _,  # masked_chain_length_list_list
+            chain_M_pos,
+            _,  # omit_AA_mask
+            residue_idx,
+            _,  # dihedral_mask
+            _,  # tied_pos_list_of_lists_list
+            _,  # pssm_coef
+            _,  # pssm_bias
+            _,  # pssm_log_odds_all
+            _,  # bias_by_res_all
+            _,  # tied_beta
+        ) = tied_featurize(
+            batch,
+            self.device,
+            chain_id_dict,
+            fixed_positions_dict,
+        )
+
+        name_ = batch[0]["name"]
+
+        # Compute probabilities
+        with torch.no_grad():
+            if unconditional:
+                # Unconditional: no sequence context
+                log_probs = self.model.unconditional_probs(
+                    X,
+                    mask,
+                    residue_idx,
+                    chain_encoding_all,
+                )
+            else:
+                # Conditional: use sequence context
+                # Use chain_M * chain_M_pos as the mask for which positions to compute
+                # When all_residues=True, both should be all 1s
+                design_mask = chain_M * chain_M_pos
+                randn = torch.randn(chain_M.shape, device=X.device)
+                log_probs = self.model.conditional_probs(
+                    X,
+                    S,
+                    mask,
+                    design_mask,
+                    residue_idx,
+                    chain_encoding_all,
+                    randn,
+                )
+
+        # Extract log probs as numpy array [L, 21]
+        # Remove batch dimension and get valid positions only
+        log_probs_np = log_probs[0].cpu().numpy()  # [L_padded, 21]
+        mask_np = mask[0].cpu().numpy()  # [L_padded]
+
+        # Get only valid (non-padded) positions
+        valid_indices = mask_np > 0
+        log_probs_valid = log_probs_np[valid_indices]  # [L, 21]
+
+        # Build residue info from chain letters and positions
+        # letter_list_list[0] contains the chain letters in order
+        chain_letters = letter_list_list[0]
+        residue_info = []
+
+        # Track position within each chain
+        pos_in_protein = 0
+        for chain_letter in chain_letters:
+            chain_seq = protein[f"seq_chain_{chain_letter}"]
+            chain_length = len(chain_seq)
+            for res_idx in range(chain_length):
+                if pos_in_protein < len(log_probs_valid):
+                    residue_info.append(
+                        ResidueInfo(chain=chain_letter, residue_idx=res_idx + 1)
+                    )
+                pos_in_protein += 1
+
+        mode = "unconditional" if unconditional else "conditional"
+
+        return ConditionalProbsResult(
+            protein_name=name_,
+            model_name=self.model_name,
+            log_probs=log_probs_valid,
+            residue_info=residue_info,
+            mode=mode,
         )
 
     def _run_inference(

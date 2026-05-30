@@ -3,10 +3,12 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import TYPE_CHECKING
+from typing import Literal
 
-if TYPE_CHECKING:
-    import numpy as np
+import numpy as np
+from pydantic import BaseModel, ConfigDict
+
+from proteinmpnn.model.utils import ALPHABET
 
 
 @dataclass
@@ -136,3 +138,78 @@ class DesignResult:
             lines.append(f"{af2_seqs} # {comment}")
 
         return "\n".join(lines)
+
+
+class ResidueInfo(BaseModel):
+    """Info for a single residue position."""
+
+    chain: str
+    residue_idx: int
+
+
+class ConditionalProbsResult(BaseModel):
+    """Result from conditional probability computation.
+
+    Attributes:
+        protein_name: Name of the protein (from PDB file).
+        model_name: Name of the ProteinMPNN model used.
+        log_probs: Log probabilities array of shape [L, 21].
+        residue_info: List of ResidueInfo for each position.
+        mode: Whether the probabilities are conditional or unconditional.
+    """
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    protein_name: str
+    model_name: str
+    log_probs: np.ndarray  # Shape [L, 21]
+    residue_info: list[ResidueInfo]
+    mode: Literal["conditional", "unconditional"]
+
+    def to_csv(self) -> str:
+        """Generate CSV-formatted string with log probabilities.
+
+        Returns:
+            CSV string with header comment and one row per residue position.
+        """
+        lines = []
+
+        # Header comment with metadata
+        lines.append(
+            f"# protein={self.protein_name}, model={self.model_name}, mode={self.mode}"
+        )
+
+        # Column headers
+        header = ["chain", "residue_idx"] + list(ALPHABET)
+        lines.append(",".join(header))
+
+        # Data rows
+        for i, res_info in enumerate(self.residue_info):
+            row_values = [res_info.chain, str(res_info.residue_idx)]
+            row_values.extend(f"{self.log_probs[i, j]:.6f}" for j in range(21))
+            lines.append(",".join(row_values))
+
+        return "\n".join(lines)
+
+    def to_npz_dict(self) -> dict:
+        """Generate dictionary for saving as NPZ file.
+
+        Returns:
+            Dictionary with log_probs, residue_info, alphabet, and metadata.
+        """
+        # Create structured array for residue info
+        residue_info_arr = np.array(
+            [(r.chain, r.residue_idx) for r in self.residue_info],
+            dtype=[("chain", "U1"), ("residue_idx", "i4")],
+        )
+
+        return {
+            "log_probs": self.log_probs,
+            "residue_info": residue_info_arr,
+            "alphabet": ALPHABET,
+            "metadata": {
+                "protein_name": self.protein_name,
+                "model_name": self.model_name,
+                "mode": self.mode,
+            },
+        }

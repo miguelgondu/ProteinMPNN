@@ -49,6 +49,7 @@ class TestRunSingleCommand:
             result = runner.invoke(
                 app,
                 [
+                    "run-single",
                     str(pdb_path),
                     "--design",
                     "A1-A10",
@@ -78,6 +79,7 @@ class TestRunSingleCommand:
             result = runner.invoke(
                 app,
                 [
+                    "run-single",
                     str(pdb_path),
                     "--design",
                     "A1-A10",
@@ -102,6 +104,7 @@ class TestRunSingleCommand:
             result = runner.invoke(
                 app,
                 [
+                    "run-single",
                     str(pdb_path),
                     "--design",
                     "A1-A10",
@@ -125,6 +128,7 @@ class TestRunSingleCommand:
             result = runner.invoke(
                 app,
                 [
+                    "run-single",
                     str(pdb_path),
                     "--design",
                     "A1-A5",
@@ -143,6 +147,6 @@ class TestRunSingleCommand:
 
     def test_run_single_help(self):
         """Test that --help works."""
-        result = runner.invoke(app, ["--help"])
+        result = runner.invoke(app, ["run-single", "--help"])
         assert result.exit_code == 0
         assert "Design sequences for a single protein structure" in result.output
