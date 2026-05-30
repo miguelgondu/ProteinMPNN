@@ -14,13 +14,16 @@ the sequence length difference.
 from __future__ import annotations
 
 import json
-from pathlib import Path
+from typing import TYPE_CHECKING
 
 import pytest
 
 from proteinmpnn.data.multi_state import MultiStateDesignInput
 from proteinmpnn.data.single_state import SingleStateDesignInput
 from proteinmpnn.utils.constants import ROOT_DIR
+
+if TYPE_CHECKING:
+    from pathlib import Path
 
 # Paths relative to repo root
 FIXTURES_DIR = ROOT_DIR / "tests" / "fixtures"
@@ -234,21 +237,21 @@ def compare_designable_residues(old_output: dict, new_output: dict) -> None:
     old_designable = [r for r in old_output["designable"] if r["WTAA"] != "XXX"]
     new_designable = new_output["designable"]
 
-    assert len(old_designable) == len(new_designable), (
-        f"Designable count mismatch: old={len(old_designable)}, new={len(new_designable)}"
-    )
+    assert len(old_designable) == len(
+        new_designable
+    ), f"Designable count mismatch: old={len(old_designable)}, new={len(new_designable)}"  # noqa: E501
 
     # Sort both lists by (chain, resid) for comparison
     old_sorted = sorted(old_designable, key=lambda r: (r["chain"], r["resid"]))
     new_sorted = sorted(new_designable, key=lambda r: (r["chain"], r["resid"]))
 
     for old_res, new_res in zip(old_sorted, new_sorted):
-        assert old_res["chain"] == new_res["chain"], (
-            f"Chain mismatch: old={old_res['chain']}, new={new_res['chain']}"
-        )
-        assert old_res["resid"] == new_res["resid"], (
-            f"Resid mismatch: old={old_res['resid']}, new={new_res['resid']}"
-        )
+        assert (
+            old_res["chain"] == new_res["chain"]
+        ), f"Chain mismatch: old={old_res['chain']}, new={new_res['chain']}"
+        assert (
+            old_res["resid"] == new_res["resid"]
+        ), f"Resid mismatch: old={old_res['resid']}, new={new_res['resid']}"
         assert old_res["WTAA"] == new_res["WTAA"], (
             f"WTAA mismatch at {old_res['chain']}{old_res['resid']}: "
             f"old={old_res['WTAA']}, new={new_res['WTAA']}"
@@ -522,9 +525,7 @@ class TestSingleConstraintMSDBackwardCompat:
             # Biopython bug with certain PDB files
             pytest.skip("Biopython parser bug with this PDB file")
 
-    def test_designable_count_matches(
-        self, old_output: dict, new_output: dict
-    ) -> None:
+    def test_designable_count_matches(self, old_output: dict, new_output: dict) -> None:
         """Verify designable residue counts match."""
         old_count = len([r for r in old_output["designable"] if r["WTAA"] != "XXX"])
         new_count = len(new_output["designable"])
@@ -565,9 +566,7 @@ class TestMixedDesignMSDBackwardCompat:
         )
         return json.loads(design.to_config().model_dump_json())
 
-    def test_designable_count_matches(
-        self, old_output: dict, new_output: dict
-    ) -> None:
+    def test_designable_count_matches(self, old_output: dict, new_output: dict) -> None:
         """Verify designable residue counts match."""
         old_count = len([r for r in old_output["designable"] if r["WTAA"] != "XXX"])
         new_count = len(new_output["designable"])
@@ -577,7 +576,9 @@ class TestMixedDesignMSDBackwardCompat:
         """Verify mixed design has negative beta weight for disfavored state."""
         tied_betas = new_output.get("tied_betas", {})
         has_negative = any(v < 0 for v in tied_betas.values())
-        assert has_negative, "Mixed design should have negative beta for disfavored state"
+        assert (
+            has_negative
+        ), "Mixed design should have negative beta for disfavored state"
 
 
 class TestMultipleConstraintMSDBackwardCompat:
@@ -606,9 +607,7 @@ class TestMultipleConstraintMSDBackwardCompat:
         )
         return json.loads(design.to_config().model_dump_json())
 
-    def test_designable_count_matches(
-        self, old_output: dict, new_output: dict
-    ) -> None:
+    def test_designable_count_matches(self, old_output: dict, new_output: dict) -> None:
         """Verify designable residue counts match."""
         old_count = len([r for r in old_output["designable"] if r["WTAA"] != "XXX"])
         new_count = len(new_output["designable"])
@@ -646,9 +645,7 @@ class TestBidirectionalMSDBackwardCompat:
         )
         return json.loads(design.to_config().model_dump_json())
 
-    def test_designable_count_matches(
-        self, old_output: dict, new_output: dict
-    ) -> None:
+    def test_designable_count_matches(self, old_output: dict, new_output: dict) -> None:
         """Verify designable residue counts match."""
         old_count = len([r for r in old_output["designable"] if r["WTAA"] != "XXX"])
         new_count = len(new_output["designable"])
