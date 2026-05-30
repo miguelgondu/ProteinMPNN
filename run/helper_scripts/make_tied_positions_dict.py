@@ -1,9 +1,9 @@
 import argparse
 import json
-from turtle import pos
+
 
 def get_json_list(input_path):
-    with open(input_path, 'r') as json_file:
+    with open(input_path) as json_file:
         json_list = list(json_file)
 
     dict_list = []
@@ -13,7 +13,7 @@ def get_json_list(input_path):
     return dict_list
 
 def main(json_list, homooligomer, position_list, chain_list):
-    
+
     homooligomeric_state = homooligomer
 
     if homooligomeric_state == 0:
@@ -43,7 +43,7 @@ def main(json_list, homooligomer, position_list, chain_list):
             my_dict[result['name']] = tied_positions_list
 
     return my_dict
- 
+
 def write_json(output_path, my_dict):
     with open(output_path, 'w') as f:
         f.write(json.dumps(my_dict) + '\n')

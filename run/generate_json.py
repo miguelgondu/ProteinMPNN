@@ -1,67 +1,66 @@
+import argparse
 import itertools
 import json
-from random import Random
-import re
-import sys, os
-import argparse
 import math
+import os
+import re
+import sys
+from collections.abc import Sequence
+from random import Random
+
 import numpy as np
-from typing import Optional, Sequence, Tuple, Dict
-from Bio.PDB import PDBParser, PDBIO, Select, Structure
+from Bio.PDB import PDBIO, PDBParser, Select, Structure
 
 
 class FileArgumentParser(argparse.ArgumentParser):
     """Overwrites default ArgumentParser to better handle flag files."""
 
-    def convert_arg_line_to_args(self, arg_line: str) -> Optional[Sequence[str]]:
+    def convert_arg_line_to_args(self, arg_line: str) -> Sequence[str] | None:
         """ Read from files where each line contains a flag and its value, e.g.
         '--flag value'. Also safely ignores comments denoted with '#' and 
         empty lines.
         """
-        
+
         # Remove any comments from the line
         arg_line = arg_line.split('#')[0]
-        
+
         # Escape if the line is empty
         if not arg_line:
             return None
 
         # Separate flag and values
         split_line = arg_line.strip().split(' ')
-        
+
         # If there is actually a value, return the flag value pair
         if len(split_line) > 1:
             return [split_line[0], ' '.join(split_line[1:])]
         # Return just flag if there is no value
-        else:
-            return split_line
+        return split_line
 
 
-class ProteinDesignInputFormatter(object):
-    def __init__(self, pdb_dir: str, designable_res: str = '', default_design_setting: str = 'all', 
-                 symmetric_res: str = '', cluster_center: str = '', cluster_radius: float = 10.0, 
-                 gap: float = 1000., validation_tries: int = 0, bidirectional: bool = False, 
+class ProteinDesignInputFormatter:
+    def __init__(self, pdb_dir: str, designable_res: str = '', default_design_setting: str = 'all',
+                 symmetric_res: str = '', cluster_center: str = '', cluster_radius: float = 10.0,
+                 gap: float = 1000., validation_tries: int = 0, bidirectional: bool = False,
                  constraints: str = '', multi_state: bool = False) -> None:
         self.CHAIN_IDS = list('ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz')
-        self.AA3 = ['ALA', 'CYS', 'ASP', 'GLU', 'PHE', 'GLY', 'HIS', 'ILE', 'LYS', 'LEU', 'MET', 'ASN', 'PRO', 
+        self.AA3 = ['ALA', 'CYS', 'ASP', 'GLU', 'PHE', 'GLY', 'HIS', 'ILE', 'LYS', 'LEU', 'MET', 'ASN', 'PRO',
                     'GLN', 'ARG', 'SER', 'THR', 'VAL', 'TRP', 'TYR', 'XXX']
         self.AA1 = list('ACDEFGHIKLMNPQRSTVWYX')
         self.AA3_to_AA1 = {aa3: aa1 for aa3, aa1 in zip(self.AA3, self.AA1)}
-        
-        # validate we have the correct number of PDBs 
+
+        # validate we have the correct number of PDBs
         if not os.path.isdir(pdb_dir):
             raise ValueError(f'The pdb_dir {pdb_dir} is does not exist.')
-        else:
-            pdb_list = [file for file in os.listdir(pdb_dir) if file[-3:]=='pdb']
-            if len(pdb_list) < 1:
-                raise ValueError(f'The pdb_dir {pdb_dir} does not contain any .pdb files.')
-            elif (len(pdb_list) > 1) and (not multi_state):
-                raise ValueError(f'The pdb_dir {pdb_dir} contains more than 1 .pdb file. '
-                                'Currently this is not supported unless in multi-state mode.')
-            else:
-                self.pdb_dir = pdb_dir
-                self.pdb_list = pdb_list
-                self.parser = PDBParser(QUIET=True)
+        pdb_list = [file for file in os.listdir(pdb_dir) if file[-3:]=='pdb']
+        if len(pdb_list) < 1:
+            raise ValueError(f'The pdb_dir {pdb_dir} does not contain any .pdb files.')
+        if (len(pdb_list) > 1) and (not multi_state):
+            raise ValueError(f'The pdb_dir {pdb_dir} contains more than 1 .pdb file. '
+                            'Currently this is not supported unless in multi-state mode.')
+        self.pdb_dir = pdb_dir
+        self.pdb_list = pdb_list
+        self.parser = PDBParser(QUIET=True)
 
         self.design_default = default_design_setting
         self.bidirectional = bidirectional
@@ -85,7 +84,7 @@ class ProteinDesignInputFormatter(object):
             self.design_res = self.parse_designable_res(designable_res)
         else:
             self.design_res = []
-        
+
         if cluster_center:
             cluster_mut = self.parse_cluster_center(cluster_center, cluster_radius)
             self.design_res += cluster_mut
@@ -107,16 +106,16 @@ class ProteinDesignInputFormatter(object):
         if self.bidirectional:
             self.apply_bidirectional()
 
-    def _check_res_validity(self, res_item: str) -> Tuple[str, int]:
-        split_item = [item for item in re.split('(\d+)', res_item) if item]
-        
+    def _check_res_validity(self, res_item: str) -> tuple[str, int]:
+        split_item = [item for item in re.split(r'(\d+)', res_item) if item]
+
         if len(split_item) != 2:
             raise ValueError(f'Unable to parse residue: {res_item}.')
         if split_item[0] not in self.CHAIN_IDS:
             raise ValueError(f'Unknown chain id in residue: {res_item}')
         return (split_item[0], int(split_item[1]))
 
-    def _check_range_validity(self, range_item: str, pdb_name: str = None) -> Sequence[Tuple[str, int]]:
+    def _check_range_validity(self, range_item: str, pdb_name: str = None) -> Sequence[tuple[str, int]]:
         split_range = range_item.split('-')
         if len(split_range) != 2:
             raise ValueError(f'Unable to parse residue range: {range_item}')
@@ -140,7 +139,7 @@ class ProteinDesignInputFormatter(object):
 
         return res_range
 
-    def _check_symmetry_validity(self, symmetric_item: str, pdb_names: Sequence[str] = None) -> Dict[str, Sequence[Tuple[str, int]]]:        
+    def _check_symmetry_validity(self, symmetric_item: str, pdb_names: Sequence[str] = None) -> dict[str, Sequence[tuple[str, int]]]:
 
         if self.multi_state:
             split_item = symmetric_item.split(':')
@@ -162,36 +161,35 @@ class ProteinDesignInputFormatter(object):
 
             return symmetry_dict
 
-        else:
-            split_item = symmetric_item.split(':')
+        split_item = symmetric_item.split(':')
 
-            symmetry_dict = {}
-            for subitem in split_item:
-                if '-' in subitem:
-                    res_range = self._check_range_validity(subitem)
-                    symmetry_dict[subitem] = res_range
-                else:
-                    res_ch, res_idx = self._check_res_validity(subitem)
-                    symmetry_dict[subitem] = [(res_ch, res_idx)]
+        symmetry_dict = {}
+        for subitem in split_item:
+            if '-' in subitem:
+                res_range = self._check_range_validity(subitem)
+                symmetry_dict[subitem] = res_range
+            else:
+                res_ch, res_idx = self._check_res_validity(subitem)
+                symmetry_dict[subitem] = [(res_ch, res_idx)]
 
-            item_lens = [len(symmetry_dict[key]) for key in symmetry_dict]
-            if math.floor(sum([l == item_lens[0] for l in item_lens])/len(item_lens)) != 1:
-                raise ValueError(f'Tied residues and residue ranges must be of the same '
-                                f'size for forcing symmetry: {symmetric_item}')
+        item_lens = [len(symmetry_dict[key]) for key in symmetry_dict]
+        if math.floor(sum([l == item_lens[0] for l in item_lens])/len(item_lens)) != 1:
+            raise ValueError(f'Tied residues and residue ranges must be of the same '
+                            f'size for forcing symmetry: {symmetric_item}')
 
-            return symmetry_dict
+        return symmetry_dict
 
     def _get_cluster_neighbors(self, center: str, cluster_radius: float) -> Sequence[str]:
-        
+
         # Chain and residue number for center
         center_ch, center_res = center
-        
+
         for pdb in self.pdb_list:
             # Get pdb structure
             pdb_id = pdb[:-4]
             pdb_file = os.path.join(self.pdb_dir, pdb)
             pdb_struct = self.parser.get_structure(id=pdb_id, file=pdb_file)
-            
+
             # Get list of chains
             chains = list(pdb_struct.get_chains())
             # Determine cluster location
@@ -209,13 +207,13 @@ class ProteinDesignInputFormatter(object):
                             break
                     break
 
-            # Determine neighbors using cluster radius        
+            # Determine neighbors using cluster radius
             neighbors = []
             for chain in chains:
                 for residue in chain.get_residues():
                     # Residue chain and number
                     res_ch, res_num = chain.id, residue.id[1]
-                    
+
                     for atom in residue.get_atoms():
                         # Find the CA atom and compute distance from center
                         if atom.get_name() == 'CA':
@@ -223,11 +221,11 @@ class ProteinDesignInputFormatter(object):
                             # If distance is less than radius, then add to neighbor list
                             if dist2center <= cluster_radius:
                                 neighbors.append( (res_ch, res_num) )
-                                
+
         return neighbors
-    
+
     def parse_cluster_center(self, cluster_center: str, cluster_radius: float) -> Sequence[str]:
-        
+
         if self.multi_state:
             # NOTE: multi-state clusters aren't multi-state aware.
             cluster_per_state = [c for c in cluster_center.strip().split(';') if c]
@@ -245,31 +243,30 @@ class ProteinDesignInputFormatter(object):
                         range_res = self._check_range_validity(item, pdb_name)
                         centers += range_res
 
-            design_res = []    
+            design_res = []
             for center in centers:
                 design_res += self._get_cluster_neighbors(center, cluster_radius)
             # remove duplicate residues
             return [*set(design_res)]
-        else:
-            cluster_center = [s for s in cluster_center.strip().split(',') if s]
-            centers = []
+        cluster_center = [s for s in cluster_center.strip().split(',') if s]
+        centers = []
 
-            for item in cluster_center:
-                if "-" not in item:
-                    item_ch, item_idx = self._check_res_validity(item)
-                    centers.append( (item_ch, item_idx) )
-                else:
-                    range_res = self._check_range_validity(item)
-                    centers += range_res
-            
-            design_res = []    
-            for center in centers:
-                design_res += self._get_cluster_neighbors(center, cluster_radius)
-                    
-            return design_res
+        for item in cluster_center:
+            if "-" not in item:
+                item_ch, item_idx = self._check_res_validity(item)
+                centers.append( (item_ch, item_idx) )
+            else:
+                range_res = self._check_range_validity(item)
+                centers += range_res
+
+        design_res = []
+        for center in centers:
+            design_res += self._get_cluster_neighbors(center, cluster_radius)
+
+        return design_res
 
     def parse_designable_res(self, design_str: str) -> Sequence[str]:
-    
+
         if self.multi_state:
             design_per_state = [d for d in design_str.strip().split(';') if d]
             design_res = []
@@ -286,25 +283,24 @@ class ProteinDesignInputFormatter(object):
                         range_res = self._check_range_validity(item, pdb_name)
                         design_res += range_res
             return design_res
-        
-        else:
-            design_str = [s for s in design_str.strip().split(",") if s]
 
-            design_res = []
-            for item in design_str:
-                if "-" not in item:
-                    item_ch, item_idx = self._check_res_validity(item)
-                    design_res.append( (item_ch, item_idx) )
-                else:
-                    range_res = self._check_range_validity(item)
-                    design_res += range_res
-            
-            return design_res
+        design_str = [s for s in design_str.strip().split(",") if s]
+
+        design_res = []
+        for item in design_str:
+            if "-" not in item:
+                item_ch, item_idx = self._check_res_validity(item)
+                design_res.append( (item_ch, item_idx) )
+            else:
+                range_res = self._check_range_validity(item)
+                design_res += range_res
+
+        return design_res
 
     def parse_symmetric_res(self, symmetric_str: str) -> Sequence[str]:
 
         symmetric_str = [s for s in symmetric_str.strip().split(",") if s]
-        
+
         symmetric_res = []
         for item in symmetric_str:
             if ":" not in item:
@@ -312,13 +308,13 @@ class ProteinDesignInputFormatter(object):
 
             symmetry_dict = self._check_symmetry_validity(item)
             symmetric_res.append(symmetry_dict)
-        
+
         return symmetric_res
-    
+
     def parse_constraints(self, symmetric_str: str) -> Sequence[str]:
         """Parsing MSD constraints by treating them as symmetry rules with some added complexity."""
         symm_per_constraint = [d for d in symmetric_str.strip().split(';') if d]
-        
+
         symmetric_res = []
         for spc in symm_per_constraint:
             symmetric_str = [s for s in spc.strip().split(",") if s]
@@ -340,9 +336,9 @@ class ProteinDesignInputFormatter(object):
 
             symmetry_dict = self._check_symmetry_validity(item, pdb_names)
             symmetric_res.append(symmetry_dict)
-        
+
         return symmetric_res
-    
+
     def generate_json(self, out_path: str) -> None:
 
         pdb_dicts = []
@@ -409,7 +405,7 @@ class ProteinDesignInputFormatter(object):
             for resind in self.design_res:
                 res_id = resind[0] + str(resind[1])
                 if pdbids[res_id][0] != 'X':
-                    mutable.append({"chain": pdbids[res_id][1], "resid": pdbids[res_id][2], 
+                    mutable.append({"chain": pdbids[res_id][1], "resid": pdbids[res_id][2],
                                     "WTAA": pdbids[res_id][0], "MutTo": self.design_default})
 
             symmetric = []
@@ -424,8 +420,7 @@ class ProteinDesignInputFormatter(object):
                         if pdbids[res_id][0] == 'X':
                             skip_tie = True
                             break
-                        else:
-                            sym_res.append( pdbids[res_id][1] + str(pdbids[res_id][2]) )
+                        sym_res.append( pdbids[res_id][1] + str(pdbids[res_id][2]) )
 
                     if not skip_tie:
                         symmetric.append(sym_res)
@@ -440,7 +435,7 @@ class ProteinDesignInputFormatter(object):
             for pdb_dict in pdb_dicts:
                 f.write(json.dumps(pdb_dict, indent=2) + '\n')
 
-    def combine_pdbs(self, gap: float = 1000., valid_tries: int = 0) -> Dict[str, Dict[str, str]]:
+    def combine_pdbs(self, gap: float = 1000., valid_tries: int = 0) -> dict[str, dict[str, str]]:
         """ 
         Combines list of PDBs into one shared PDB file with new chain IDs.
         Each state is separated by 1000A. Optionally tries to resolve clashes.
@@ -539,7 +534,7 @@ class ProteinDesignInputFormatter(object):
                 raise ValueError(f"Bidirectional constraints not supported for {len(items)} subunits.")
         return
 
-    def update_design_res(self, cluster_mutations: Sequence[Tuple[str, int]]):
+    def update_design_res(self, cluster_mutations: Sequence[tuple[str, int]]):
         """Checks to see if any mutations added by cluster selection have constraints on them - if so, add the matching residues to self.design_res"""
         for sr in self.symmetric_res:  # iterate over symmetry constraints
             items = sr.values()
@@ -552,7 +547,7 @@ class ProteinDesignInputFormatter(object):
                                 mut_to_add = add_item[cm_idx]
                                 if mut_to_add not in self.design_res and mut_to_add[1] == cm[1]:
                                     self.design_res.append(mut_to_add)
-        
+
         # sort self.design_res since cluster mutations will be all jumbled up at the end
         self.design_res = sorted(sorted(self.design_res, key=lambda x: x[1]), key=lambda x: x[0])
         return
@@ -571,7 +566,7 @@ def _check_structure(target: Structure) -> bool:
         for c in coords:
             if c > 9999. or c < -999.:
                 raise ValueError('MSD intermediate is too big for PDB format - try reducing --gap option or number of states used at once')
-            
+
     chains = target.get_chains()
     chains = [c for c in chains]
     if len(chains) > 62:
@@ -606,7 +601,7 @@ def get_arguments() -> argparse.Namespace:
     # Construct the parser and its arguments.
     parser = FileArgumentParser(description='Script that takes a PDB and design'
                                 'specifications to create a json file for input'
-                                'to ProteinMPNN', 
+                                'to ProteinMPNN',
                                 fromfile_prefix_chars='@')
 
     parser.add_argument('--pdb_dir',
@@ -652,28 +647,28 @@ def get_arguments() -> argparse.Namespace:
                         "proteinmpnn_res_specs.json.")
 
     # multi-state design args
-    parser.add_argument('--gap', 
+    parser.add_argument('--gap',
                         default=1000.,
                         type=float,
                         help="Gap (in Angstrom) between states in MSD intermediate structure. "
                         "Only may be needed if your structures are very big. Default is 1000.0 A.")
-    parser.add_argument('--validation_tries', 
-                        default=0, 
-                        type=int, 
+    parser.add_argument('--validation_tries',
+                        default=0,
+                        type=int,
                         help="If set to 0, will not check the MSD intermediate structure "
                         "for clashes. Recommended when running MSD on a new system. Very slow!")
-    parser.add_argument('--bidirectional', 
-                        action='store_true', 
+    parser.add_argument('--bidirectional',
+                        action='store_true',
                         help="Turn on bidirectional coding constraints. MSD only. Default is off.")
-    parser.add_argument('--constraints', 
+    parser.add_argument('--constraints',
                         type=str,
                         default='',
                         help='Semicolon-separated list of multi-state design constraints. '
                         'commas separate individual residue sets within a constraint. '
                         'E.g. PDB1:A10-A15:1,PDB2:A10-A15:0.5;PDB1:A20-A25:1,PDB3:B20-B25:-1'
                         'See examples/multi_state for details.')
-    parser.add_argument('--multi_state', 
-                        action='store_true', 
+    parser.add_argument('--multi_state',
+                        action='store_true',
                         default=False,
                         help="Enable multi-state design (MSD) parsing.")
 
@@ -681,13 +676,13 @@ def get_arguments() -> argparse.Namespace:
     args = parser.parse_args(sys.argv[1:])
 
     return args
-    
+
 
 if __name__=="__main__":
     args = get_arguments()
 
-    pdif = ProteinDesignInputFormatter(args.pdb_dir, args.designable_res, args.default_design_setting, 
-                                       args.symmetric_res, args.cluster_center, args.cluster_radius, 
-                                       args.gap, args.validation_tries, args.bidirectional, args.constraints, 
+    pdif = ProteinDesignInputFormatter(args.pdb_dir, args.designable_res, args.default_design_setting,
+                                       args.symmetric_res, args.cluster_center, args.cluster_radius,
+                                       args.gap, args.validation_tries, args.bidirectional, args.constraints,
                                        args.multi_state)
     pdif.generate_json(args.out_path)

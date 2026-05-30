@@ -10,7 +10,7 @@ import numpy as np
 import torch
 import torch.nn as nn
 
-from proteinmpnn.model.utils import cat_neighbors_nodes, gather_edges, gather_nodes
+from proteinmpnn.model.utils import cat_neighbors_nodes, gather_edges
 
 
 class PositionWiseFeedForward(nn.Module):
@@ -37,8 +37,7 @@ class PositionWiseFeedForward(nn.Module):
             Output tensor of shape [B, L, num_hidden].
         """
         h = self.act(self.W_in(h_V))
-        h = self.W_out(h)
-        return h
+        return self.W_out(h)
 
 
 class PositionalEncodings(nn.Module):
@@ -71,8 +70,7 @@ class PositionalEncodings(nn.Module):
         d_onehot = torch.nn.functional.one_hot(
             d.long(), 2 * self.max_relative_feature + 1 + 1
         )
-        E = self.linear(d_onehot.float())
-        return E
+        return self.linear(d_onehot.float())
 
 
 class EncLayer(nn.Module):
@@ -270,7 +268,7 @@ class ProteinFeatures(nn.Module):
         self.num_positional_embeddings = num_positional_embeddings
 
         self.embeddings = PositionalEncodings(num_positional_embeddings)
-        node_in, edge_in = 6, num_positional_embeddings + num_rbf * 25
+        _, edge_in = 6, num_positional_embeddings + num_rbf * 25
         self.edge_embedding = nn.Linear(edge_in, edge_features, bias=False)
         self.norm_edges = nn.LayerNorm(edge_features)
 
@@ -294,7 +292,6 @@ class ProteinFeatures(nn.Module):
         D = mask_2D * torch.sqrt(torch.sum(dX**2, 3) + eps)
         D_max, _ = torch.max(D, -1, keepdim=True)
         D_adjust = D + (1.0 - mask_2D) * D_max
-        sampled_top_k = self.top_k
         D_neighbors, E_idx = torch.topk(
             D_adjust, np.minimum(self.top_k, X.shape[1]), dim=-1, largest=False
         )
@@ -315,8 +312,7 @@ class ProteinFeatures(nn.Module):
         D_mu = D_mu.view([1, 1, 1, -1])
         D_sigma = (D_max - D_min) / D_count
         D_expand = torch.unsqueeze(D, -1)
-        RBF = torch.exp(-(((D_expand - D_mu) / D_sigma) ** 2))
-        return RBF
+        return torch.exp(-(((D_expand - D_mu) / D_sigma) ** 2))
 
     def _get_rbf(
         self, A: torch.Tensor, B: torch.Tensor, E_idx: torch.Tensor
@@ -337,8 +333,7 @@ class ProteinFeatures(nn.Module):
         D_A_B_neighbors = gather_edges(D_A_B[:, :, :, None], E_idx)[
             :, :, :, 0
         ]  # [B,L,K]
-        RBF_A_B = self._rbf(D_A_B_neighbors)
-        return RBF_A_B
+        return self._rbf(D_A_B_neighbors)  # RBF_A_B
 
     def forward(
         self,

@@ -13,8 +13,13 @@ from proteinmpnn.data.single_state import SingleStateDesignInput
 from proteinmpnn.data.structure.dataset import StructureDatasetPDB
 from proteinmpnn.inference.results import DesignResult, NativeSequence, SequenceResult
 from proteinmpnn.inference.transform import transform_inputs
-from proteinmpnn.model.proteinmpnn import ProteinMPNN, _S_to_seq, _scores, tied_featurize
-from proteinmpnn.utils.constants import AA, HIDDEN_DIM, NUM_LAYERS, WEIGHTS_PATH
+from proteinmpnn.model.featurize import tied_featurize
+from proteinmpnn.model.losses import _scores
+from proteinmpnn.model.proteinmpnn import (
+    ProteinMPNN,
+)
+from proteinmpnn.model.utils import _S_to_seq
+from proteinmpnn.utils.constants import HIDDEN_DIM, NUM_LAYERS, WEIGHTS_PATH
 
 if TYPE_CHECKING:
     from proteinmpnn.data.config import SingleStateConfig
@@ -453,9 +458,7 @@ class InferenceRunner:
                 list_of_AAs.append(native_seq[start:end])
                 start = end
 
-            native_seq = "".join(
-                list(np.array(list_of_AAs)[np.argsort(masked_list)])
-            )
+            native_seq = "".join(list(np.array(list_of_AAs)[np.argsort(masked_list)]))
             l0 = 0
             for mc_length in list(
                 np.array(masked_chain_length_list)[np.argsort(masked_list)]

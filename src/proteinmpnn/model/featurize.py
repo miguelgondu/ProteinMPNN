@@ -6,7 +6,6 @@ structure data into tensor representations for the ProteinMPNN model.
 
 from __future__ import annotations
 
-import itertools
 from typing import Any
 
 import numpy as np
@@ -131,12 +130,8 @@ def tied_featurize(
         else:
             masked_chains = [item[-1:] for item in list(b) if item[:10] == "seq_chain_"]
             visible_chains = []
-        num_chains = b["num_of_chains"]
         all_chains = masked_chains + visible_chains
-        # random.shuffle(all_chains)
     for i, b in enumerate(batch):
-        mask_dict = {}
-        a = 0
         x_chain_list = []
         chain_mask_list = []
         chain_seq_list = []
@@ -248,11 +243,10 @@ def tied_featurize(
                 pssm_coef = np.zeros(chain_length)
                 pssm_bias = np.zeros([chain_length, 21])
                 pssm_log_odds = 10000.0 * np.ones([chain_length, 21])
-                if pssm_dict:
-                    if pssm_dict[b["name"]][letter]:
-                        pssm_coef = pssm_dict[b["name"]][letter]["pssm_coef"]
-                        pssm_bias = pssm_dict[b["name"]][letter]["pssm_bias"]
-                        pssm_log_odds = pssm_dict[b["name"]][letter]["pssm_log_odds"]
+                if pssm_dict and pssm_dict[b["name"]][letter]:
+                    pssm_coef = pssm_dict[b["name"]][letter]["pssm_coef"]
+                    pssm_bias = pssm_dict[b["name"]][letter]["pssm_bias"]
+                    pssm_log_odds = pssm_dict[b["name"]][letter]["pssm_log_odds"]
                 pssm_coef_list.append(pssm_coef)
                 pssm_bias_list.append(pssm_bias)
                 pssm_log_odds_list.append(pssm_log_odds)
@@ -267,9 +261,6 @@ def tied_featurize(
         if tied_positions_dict is not None:
             tied_pos_list = tied_positions_dict[b["name"]]
             if tied_pos_list:
-                set_chains_tied = set(
-                    list(itertools.chain(*[list(item) for item in tied_pos_list]))
-                )
                 for tied_item in tied_pos_list:
                     one_list = []
                     for k, v in tied_item.items():

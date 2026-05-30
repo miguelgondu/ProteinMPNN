@@ -46,3 +46,6 @@ extend-select = [
     "PTH",      # Use pathlib instead of os.path
     "NPY",      # Some numpy-specific things
 ]
+ignore = [
+    "E741", # Do not use variables named 'l', 'O', or 'I'
+]

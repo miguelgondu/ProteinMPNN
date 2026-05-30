@@ -1,9 +1,10 @@
-from itertools import chain
-import os, glob, re
-from typing import Dict
+import glob
+import os
+import re
+
 import numpy as np
+from helper_scripts import make_fixed_positions_dict, make_pos_neg_tied_positions_dict
 from protein_mpnn.protein_mpnn_utils import StructureDatasetPDB, parse_PDB
-from helper_scripts import make_fixed_positions_dict, make_tied_positions_dict, make_pos_neg_tied_positions_dict
 
 # Model config for storing hyperparameters
 MODEL_CONFIG = {'hidden_dim': 128,
@@ -49,18 +50,17 @@ def get_pdb_dataset(pdb_dir: str) -> StructureDatasetPDB:
     Output:
         StructureDatasetPDB: A dataset containing the parsed proteins and
             their backbone coordinates.
-    """ 
+    """
 
     if os.path.isdir(pdb_dir):
         # Find all pdb files
         pdb_files = glob.glob(os.path.join(pdb_dir, '*.pdb'))
         if len(pdb_files) == 0:
             raise ValueError(f'No .pdb files detected in pdb_dir: {pdb_dir}')
-        else:
-            # Parse every pdb file and add parsed dict to overall list
-            pdb_dict_list = []
-            for pdb_file in pdb_files:
-                pdb_dict_list += parse_PDB(pdb_file)
+        # Parse every pdb file and add parsed dict to overall list
+        pdb_dict_list = []
+        for pdb_file in pdb_files:
+            pdb_dict_list += parse_PDB(pdb_file)
 
         # Construct dataset from pdb_dict_list
         dataset_valid = StructureDatasetPDB(pdb_dict_list, max_length=20000)
@@ -84,11 +84,10 @@ def get_pdb_dataset_func(pdb_list: list) -> StructureDatasetPDB:
     if len(pdb_list) == 0:
         raise ValueError(f'No .pdb files detected in pdb_dir: {pdb_dir}')
 
-    else:
-        # Parse every pdb file and add parsed dict to overall list
-        pdb_dict_list = []
-        for pdb_file in pdb_files:
-            pdb_dict_list += parse_PDB(pdb_file)
+    # Parse every pdb file and add parsed dict to overall list
+    pdb_dict_list = []
+    for pdb_file in pdb_files:
+        pdb_dict_list += parse_PDB(pdb_file)
 
     # Construct dataset from pdb_dict_list
     dataset_valid = StructureDatasetPDB(pdb_dict_list, max_length=20000)
@@ -103,7 +102,7 @@ def fixed_positions_args(design_spec_dict, protein):
     for res in design_res:
         if res['chain'] not in design_positions:
             design_positions[res['chain']] = []
-        
+
         if res['resid'] not in design_positions[res['chain']]:
             design_positions[res['chain']].append(str(res['resid']))
 
@@ -142,15 +141,15 @@ def tied_positions_args(design_spec_dict, protein):
     for res in symmetric_res:
         split_res = []
         for res_item in res:
-            split_item = re.split('(\d+)', res_item)
+            split_item = re.split(r'(\d+)', res_item)
             chain_id = split_item[0]
             res_idx = split_item[1]
             split_res.append( (chain_id, res_idx) )
-        
+
         for res_item in split_res:
             if res_item[0] not in chain_positions:
                 chain_positions[res_item[0]] = []
-                
+
             if res_item[1] not in chain_positions[res_item[0]]:
                 chain_positions[res_item[0]].append(res_item[1])
 
@@ -167,7 +166,7 @@ def multi_state_args(design_spec_dict, protein):
         split_res = []
         tmp_chain_pair = []
         for res_item in sorted(res):  # iterate over each individual residue
-            split_item = re.split('(\d+)', res_item)
+            split_item = re.split(r'(\d+)', res_item)
             chain_id = split_item[0]
             res_idx = split_item[1]
             split_res.append( (chain_id, res_idx) )
@@ -178,12 +177,12 @@ def multi_state_args(design_spec_dict, protein):
         for res_item in split_res:
             if res_item[0] not in chain_positions:
                 chain_positions[res_item[0]] = []
-                
+
             if res_item[1] not in chain_positions[res_item[0]]:
                 chain_positions[res_item[0]].append(res_item[1])
 
     position_list = [' '.join(chain_pos) for chain_pos in list(chain_positions.values())]
-    chain_betas = [[design_spec_dict['tied_betas'][c] for c in cp] for cp in chain_pairs]  
+    chain_betas = [[design_spec_dict['tied_betas'][c] for c in cp] for cp in chain_pairs]
     chain_pairs = [' '.join(cp) for cp in chain_pairs]
     chain_betas = [' '.join(map(str, cb)) for cb in chain_betas]
 
@@ -233,13 +232,13 @@ def _form_omit_AA_list(res):
                 omit_AAs = omit_AAs.union(set(res['WTAA']))
             elif set(key[1:]).issubset(alphabet):
                 omit_AAs = omit_AAs.union(set(key[1:]))
-                
+
     return ''.join(list(omit_AAs))
 
 
 def _old_form_omit_AA_list(res):
     # Determine which residues to omit
-    if res['MutTo'] != 'all':                        
+    if res['MutTo'] != 'all':
         if 'hydphob' in res['MutTo']:
             # Exclude hydrophilics
             omit_AAs = 'CDEHKNPQRSTX'
@@ -266,7 +265,7 @@ def _old_form_omit_AA_list(res):
         else:
             # Provide a default of X to omit_AAs
             omit_AAs = 'X'
-        
+
         if '-' in res['MutTo']:
             # Add to omit list
             to_omit = res['MutTo'].split('-')[-1].split('+')[0]
@@ -279,59 +278,59 @@ def _old_form_omit_AA_list(res):
                     omit_AAs = list(omit_AAs)
                     omit_AAs.remove(aa)
                     omit_AAs = ''.join(omit_AAs)
-                
+
     return omit_AAs
 
 
 def new_make_tied_positions_dict(design_spec_dict, protein):
     symmetric_res = design_spec_dict['symmetric']
-    
+
     dict_list = []
     for res in symmetric_res:
         tmp_dict = {}
         for res_item in res:
-            split_item = re.split('(\d+)', res_item)
+            split_item = re.split(r'(\d+)', res_item)
             chain_id = str(split_item[0])
             res_idx = int(split_item[1])
             tmp_dict[chain_id] = [res_idx]
         dict_list.append(tmp_dict)
-    
+
     tied_positions_dict = {
         protein["name"]: dict_list,
     }
-    
+
     return tied_positions_dict
 
 
-def transform_inputs(design_spec_dict: Dict[str, Dict[str, np.ndarray]], protein, experimental=False):
-    
+def transform_inputs(design_spec_dict: dict[str, dict[str, np.ndarray]], protein, experimental=False):
+
     # Loaded from chain_id_json
     # Additional example of design at line 144
     # Usage in Examples 2, 4, 5 (VAN + CA)
     # /helper_scripts/assign_fixed_chains.py
-    # Note 1: Used --jsonl_path (as created by 
+    # Note 1: Used --jsonl_path (as created by
     #     /helper_scripts/parse_multiple_chains.py) as --input_path
-    #     This is the same outputs found in the protein_dict acquired by 
+    #     This is the same outputs found in the protein_dict acquired by
     #     pdb_ds[i] for index i
     # Input Args:
     #     --input_path see Note 1
     #     --output_path doesn't matter
     #     --chain_list "A C"
     # After looking through and making some changes to assign_fixed_chains.py
-    # I think I have deduced that this dictionary isn't necessary because 
+    # I think I have deduced that this dictionary isn't necessary because
     # everything should be handled by fixed_positions and tied_positions.
     chain_id_dict = None
 
     # Loaded from fixed_positions_json
     # Usage in Examples 4, 5, and 6 (no 6 for CA)
     # /helper_scripts/make_fixed_positions_dict.py
-    # Note 1: Used --jsonl_path (as created by 
+    # Note 1: Used --jsonl_path (as created by
     #     /helper_scripts/parse_multiple_chains.py) as --input_path
-    #     This is the same outputs found in the protein_dict acquired by 
+    #     This is the same outputs found in the protein_dict acquired by
     #     pdb_ds[i] for index i
     # Input Args:
     #     --input_path see Note 1
-    #     --output_path doesn't matter 
+    #     --output_path doesn't matter
     #     --chain_list "A C"
     #     --position_list "1 2 3 4 5 6 7 8, 1 2 3 4 5 6 7 8"
     fixed_positions_dict = make_fixed_positions_dict.main(*fixed_positions_args(design_spec_dict, protein))
@@ -341,15 +340,15 @@ def transform_inputs(design_spec_dict: Dict[str, Dict[str, np.ndarray]], protein
     # Loaded from tied_positions_json
     # Usage in Examples 5 and 6 (VAN + CA)
     # /helper_scripts/make_tied_positions_dict.py
-    # Note 1: Used --jsonl_path (as created by 
+    # Note 1: Used --jsonl_path (as created by
     #     /helper_scripts/parse_multiple_chains.py) as --input_path
-    #     This is the same outputs found in the protein_dict acquired by 
+    #     This is the same outputs found in the protein_dict acquired by
     #     pdb_ds[i] for index i
     # Input Args:
     #     --input_path see Note 1
     #     --output_path doesn't matter
     #     --chain_list "A C"
-    #     --position_list "1 2 3 4 5 6 7 8, 1 2 3 4 5 6 7 8" 
+    #     --position_list "1 2 3 4 5 6 7 8, 1 2 3 4 5 6 7 8"
 
     # Added option for multi-state design use triggered by presence of tied_betas specs
     # This replaces the make_tied_positions.py step with:
@@ -358,7 +357,7 @@ def transform_inputs(design_spec_dict: Dict[str, Dict[str, np.ndarray]], protein
     #     --input_path see Note 1
     #     --output_path doesn't matter
     #     --chain_list "A C"
-    #     --position_list "1 2 3 4 5 6 7 8, 1 2 3 4 5 6 7 8" 
+    #     --position_list "1 2 3 4 5 6 7 8, 1 2 3 4 5 6 7 8"
     #     --pos_neg_chain_list "A C"
     #     --pos_neg_chain_betas "1.0 -1.0"
 
@@ -387,7 +386,7 @@ def transform_inputs(design_spec_dict: Dict[str, Dict[str, np.ndarray]], protein
                 #print(res, chain_letter)
                 if res['chain'] == chain_letter:
                     # Determine which residues to omit
-                    if res['MutTo'] != 'all':                        
+                    if res['MutTo'] != 'all':
                         if experimental:
                             omit_AAs = _form_omit_AA_list(res)
                         else:

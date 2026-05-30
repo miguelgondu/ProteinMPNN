@@ -6,10 +6,7 @@ at neighbor indices, and sequence conversion utilities.
 
 from __future__ import annotations
 
-from typing import Sequence
-
 import torch
-
 
 # Amino acid alphabet used by ProteinMPNN
 ALPHABET = "ACDEFGHIKLMNPQRSTVWYX"
@@ -94,8 +91,7 @@ def S_to_seq(S: torch.Tensor, mask: torch.Tensor) -> str:
         >>> S_to_seq(S, mask)
         'ACE'
     """
-    seq = "".join([ALPHABET[c] for c, m in zip(S.tolist(), mask.tolist()) if m > 0])
-    return seq
+    return "".join([ALPHABET[c] for c, m in zip(S.tolist(), mask.tolist()) if m > 0])
 
 
 # Backward compatibility alias

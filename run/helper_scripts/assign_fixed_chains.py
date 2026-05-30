@@ -1,8 +1,9 @@
 import argparse
 import json
 
+
 def get_json_list(input_path):
-    with open(input_path, 'r') as json_file:
+    with open(input_path) as json_file:
         json_list = list(json_file)
 
     dict_list = []
@@ -12,7 +13,7 @@ def get_json_list(input_path):
     return dict_list
 
 def main(json_list, chain_list):
-    
+
     global_designed_chain_list = []
     if chain_list != '':
         global_designed_chain_list = [str(item) for item in chain_list.split()]
@@ -24,9 +25,9 @@ def main(json_list, chain_list):
         else:
             #manually specify, e.g.
             designed_chain_list = ["A"]
-        fixed_chain_list = [letter for letter in all_chain_list if letter not in designed_chain_list] #fix/do not redesign these chains 
+        fixed_chain_list = [letter for letter in all_chain_list if letter not in designed_chain_list] #fix/do not redesign these chains
         my_dict[result['name']]= (designed_chain_list, fixed_chain_list)
-    
+
     return my_dict
 
 def write_json(output_path, my_dict):
@@ -38,7 +39,7 @@ if __name__ == "__main__":
     argparser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)
     argparser.add_argument("--input_path", type=str, help="Path to the parsed PDBs")
     argparser.add_argument("--output_path", type=str, help="Path to the output dictionary")
-    argparser.add_argument("--chain_list", type=str, default='', help="List of the chains that need to be designed")    
+    argparser.add_argument("--chain_list", type=str, default='', help="List of the chains that need to be designed")
 
     args = argparser.parse_args()
     json_list = get_json_list(args.input_path)

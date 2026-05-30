@@ -1,9 +1,10 @@
-from Bio import SeqIO
 from sys import argv
+
+from Bio import SeqIO
 
 fname = argv[1]
 
-with open(fname, 'r') as fopen:
+with open(fname) as fopen:
     records = [r for r in SeqIO.parse(fopen, 'fasta')]
 
 wt = records[0]

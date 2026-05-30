@@ -1,7 +1,8 @@
-import numpy as np
 import argparse
 import os
+
 import matplotlib.pyplot as plt
+import numpy as np
 
 
 def plot_probs(data, args, png_name):
@@ -45,7 +46,7 @@ def subtract(args):
 
     probs1 = load_file(args.input[0])
     probs2 = load_file(args.input[1])
-    
+
     if probs1.shape != probs2.shape:
         raise ValueError(f"Probabilities with shape {probs1.shape} don't match those with shape {probs2.shape}")
 

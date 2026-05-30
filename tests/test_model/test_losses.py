@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import pytest
 import torch
 
 from proteinmpnn.model.losses import _scores, loss_nll, loss_smoothed, scores

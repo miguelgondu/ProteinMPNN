@@ -1,13 +1,13 @@
-import json, time, os
-import numpy as np
-import torch
-from torch.utils.data.dataset import random_split, Subset
+import itertools
+import json
+import os
+import time
 
+import numpy as np
+import protein_mpnn.metropolis_sample as metropolis_sample
+import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import itertools
-
-import protein_mpnn.metropolis_sample as metropolis_sample
 
 # A number of functions/classes are adopted from: https://github.com/jingraham/neurips19-graph-protein-design
 
@@ -38,22 +38,22 @@ def parse_PDB_biounits(x, atoms=['N','CA','C'], chain=None):
   states = len(alpha_1)
   alpha_3 = ['ALA','ARG','ASN','ASP','CYS','GLN','GLU','GLY','HIS','ILE',
              'LEU','LYS','MET','PHE','PRO','SER','THR','TRP','TYR','VAL','GAP']
-  
+
   aa_1_N = {a:n for n,a in enumerate(alpha_1)}
   aa_3_N = {a:n for n,a in enumerate(alpha_3)}
   aa_N_1 = {n:a for n,a in enumerate(alpha_1)}
   aa_1_3 = {a:b for a,b in zip(alpha_1,alpha_3)}
   aa_3_1 = {b:a for a,b in zip(alpha_1,alpha_3)}
-  
+
   def AA_to_N(x):
     # ["ARND"] -> [[0,1,2,3]]
-    x = np.array(x);
+    x = np.array(x)
     if x.ndim == 0: x = x[None]
     return [[aa_1_N.get(a, states-1) for a in y] for y in x]
-  
+
   def N_to_AA(x):
     # [[0,1,2,3]] -> ["ARND"]
-    x = np.array(x);
+    x = np.array(x)
     if x.ndim == 1: x = x[None]
     return ["".join([aa_N_1.get(a,"-") for a in y]) for y in x]
 
@@ -73,22 +73,22 @@ def parse_PDB_biounits(x, atoms=['N','CA','C'], chain=None):
         resn = line[22:22+5].strip()
         x,y,z = [float(line[i:(i+8)]) for i in [30,38,46]]
 
-        if resn[-1].isalpha(): 
+        if resn[-1].isalpha():
             resa,resn = resn[-1],int(resn[:-1])-1
-        else: 
+        else:
             resa,resn = "",int(resn)-1
 #         resn = int(resn)
-        if resn < min_resn: 
+        if resn < min_resn:
             min_resn = resn
-        if resn > max_resn: 
+        if resn > max_resn:
             max_resn = resn
-        if resn not in xyz: 
+        if resn not in xyz:
             xyz[resn] = {}
-        if resa not in xyz[resn]: 
+        if resa not in xyz[resn]:
             xyz[resn][resa] = {}
-        if resn not in seq: 
+        if resn not in seq:
             seq[resn] = {}
-        if resa not in seq[resn]: 
+        if resa not in seq[resn]:
             seq[resn][resa] = resi
 
         if atom not in xyz[resn][resa]:
@@ -118,10 +118,10 @@ def parse_PDB(path_to_pdb, input_chain_list=None):
     init_alphabet = ['A', 'B', 'C', 'D', 'E', 'F', 'G','H', 'I', 'J','K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T','U', 'V','W','X', 'Y', 'Z', 'a', 'b', 'c', 'd', 'e', 'f', 'g','h', 'i', 'j','k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't','u', 'v','w','x', 'y', 'z']
     extra_alphabet = [str(item) for item in list(np.arange(300))]
     chain_alphabet = init_alphabet + extra_alphabet
-     
+
     if input_chain_list:
-        chain_alphabet = input_chain_list  
- 
+        chain_alphabet = input_chain_list
+
 
     biounit_names = [path_to_pdb]
     for biounit in biounit_names:
@@ -290,7 +290,7 @@ def tied_featurize(batch, device, chain_dict, fixed_position_dict=None, omit_AA_
                 else:
                     bias_by_res_list.append(np.zeros([chain_length, 21]))
 
-       
+
         letter_list_np = np.array(letter_list)
         tied_pos_list_of_lists = []
         tied_beta = np.ones(L_max)
@@ -313,7 +313,7 @@ def tied_featurize(batch, device, chain_dict, fixed_position_dict=None, omit_AA_
         tied_pos_list_of_lists_list.append(tied_pos_list_of_lists)
 
 
- 
+
         x = np.concatenate(x_chain_list,0) #[L, 4, 3]
         all_sequence = "".join(chain_seq_list)
         m = np.concatenate(chain_mask_list,0) #[L,], 1.0 for places that need to be predicted
@@ -412,7 +412,7 @@ def loss_smoothed(S, log_probs, mask, weight=0.1):
     loss_av = torch.sum(loss * mask) / torch.sum(mask)
     return loss, loss_av
 
-class StructureDataset():
+class StructureDataset:
     def __init__(self, jsonl_file, verbose=True, truncate=None, max_length=100,
         alphabet='ACDEFGHIKLMNPQRSTVWYX-'):
         alphabet_set = set([a for a in alphabet])
@@ -429,7 +429,7 @@ class StructureDataset():
             start = time.time()
             for i, line in enumerate(lines):
                 entry = json.loads(line)
-                seq = entry['seq'] 
+                seq = entry['seq']
                 name = entry['name']
 
                 # Convert raw coords to np arrays
@@ -456,7 +456,7 @@ class StructureDataset():
 
                 if verbose and (i + 1) % 1000 == 0:
                     elapsed = time.time() - start
-                    print('{} entries ({} loaded) in {:.1f} s'.format(len(self.data), i+1, elapsed))
+                    print(f'{len(self.data)} entries ({i+1} loaded) in {elapsed:.1f} s')
 
             print('discarded', discard_count)
     def __len__(self):
@@ -464,9 +464,9 @@ class StructureDataset():
 
     def __getitem__(self, idx):
         return self.data[idx]
-    
 
-class StructureDatasetPDB():
+
+class StructureDatasetPDB:
     def __init__(self, pdb_dict_list, verbose=True, truncate=None, max_length=100,
         alphabet='ACDEFGHIKLMNPQRSTVWYX-'):
         alphabet_set = set([a for a in alphabet])
@@ -507,8 +507,8 @@ class StructureDatasetPDB():
         return self.data[idx]
 
 
-    
-class StructureLoader():
+
+class StructureLoader:
     def __init__(self, dataset, batch_size=100, shuffle=True,
         collate_fn=lambda x:x, drop_last=False):
         self.dataset = dataset
@@ -540,8 +540,8 @@ class StructureLoader():
         for b_idx in self.clusters:
             batch = [self.dataset[i] for i in b_idx]
             yield batch
-    
-            
+
+
 # The following gather functions
 def gather_edges(edges, neighbor_idx):
     # Features [B,N,N,C] at Neighbor indices [B,N,K] => Neighbor features [B,N,K,C]
@@ -573,7 +573,7 @@ def cat_neighbors_nodes(h_nodes, h_neighbors, E_idx):
 
 class EncLayer(nn.Module):
     def __init__(self, num_hidden, num_in, dropout=0.1, num_heads=None, scale=30):
-        super(EncLayer, self).__init__()
+        super().__init__()
         self.num_hidden = num_hidden
         self.num_in = num_in
         self.scale = scale
@@ -621,7 +621,7 @@ class EncLayer(nn.Module):
 
 class DecLayer(nn.Module):
     def __init__(self, num_hidden, num_in, dropout=0.1, num_heads=None, scale=30):
-        super(DecLayer, self).__init__()
+        super().__init__()
         self.num_hidden = num_hidden
         self.num_in = num_in
         self.scale = scale
@@ -657,12 +657,12 @@ class DecLayer(nn.Module):
         if mask_V is not None:
             mask_V = mask_V.unsqueeze(-1)
             h_V = mask_V * h_V
-        return h_V 
+        return h_V
 
 
 class PositionWiseFeedForward(nn.Module):
     def __init__(self, num_hidden, num_ff):
-        super(PositionWiseFeedForward, self).__init__()
+        super().__init__()
         self.W_in = nn.Linear(num_hidden, num_ff, bias=True)
         self.W_out = nn.Linear(num_ff, num_hidden, bias=True)
         self.act = torch.nn.GELU()
@@ -673,7 +673,7 @@ class PositionWiseFeedForward(nn.Module):
 
 class PositionalEncodings(nn.Module):
     def __init__(self, num_embeddings, max_relative_feature=32):
-        super(PositionalEncodings, self).__init__()
+        super().__init__()
         self.num_embeddings = num_embeddings
         self.max_relative_feature = max_relative_feature
         self.linear = nn.Linear(2*max_relative_feature+1+1, num_embeddings)
@@ -688,11 +688,11 @@ class ProteinFeatures(nn.Module):
     def __init__(self, edge_features, node_features, num_positional_embeddings=16,
         num_rbf=16, top_k=30, augment_eps=0., num_chain_embeddings=16):
         """ Extract protein features """
-        super(ProteinFeatures, self).__init__()
+        super().__init__()
         self.edge_features = edge_features
         self.node_features = node_features
         self.top_k = top_k
-        self.augment_eps = augment_eps 
+        self.augment_eps = augment_eps
         self.num_rbf = num_rbf
         self.num_positional_embeddings = num_positional_embeddings
 
@@ -730,7 +730,7 @@ class ProteinFeatures(nn.Module):
     def forward(self, X, mask, residue_idx, chain_labels):
         if self.augment_eps > 0:
             X = X + self.augment_eps * torch.randn_like(X)
-        
+
         b = X[:,:,1,:] - X[:,:,0,:]
         c = X[:,:,2,:] - X[:,:,1,:]
         a = torch.cross(b, c, dim=-1)
@@ -739,7 +739,7 @@ class ProteinFeatures(nn.Module):
         N = X[:,:,0,:]
         C = X[:,:,2,:]
         O = X[:,:,3,:]
- 
+
         D_neighbors, E_idx = self._dist(Ca, mask)
 
         RBF_all = []
@@ -779,7 +779,7 @@ class ProteinFeatures(nn.Module):
         E = torch.cat((E_positional, RBF_all), -1)
         E = self.edge_embedding(E)
         E = self.norm_edges(E)
-        return E, E_idx 
+        return E, E_idx
 
 
 
@@ -787,7 +787,7 @@ class ProteinMPNN(nn.Module):
     def __init__(self, num_letters, node_features, edge_features,
         hidden_dim, num_encoder_layers=3, num_decoder_layers=3,
         vocab=21, k_neighbors=64, augment_eps=0.05, dropout=0.1):
-        super(ProteinMPNN, self).__init__()
+        super().__init__()
 
         # Hyperparameters
         self.node_features = node_features
@@ -853,7 +853,7 @@ class ProteinMPNN(nn.Module):
 
         h_EXV_encoder_fw = mask_fw * h_EXV_encoder
         for layer in self.decoder_layers:
-            # Masked positions attend to encoder information, unmasked see. 
+            # Masked positions attend to encoder information, unmasked see.
             h_ESV = cat_neighbors_nodes(h_V, h_ES, E_idx)
             h_ESV = mask_bw * h_ESV + h_EXV_encoder_fw
             h_V = layer(h_V, h_ESV, mask)
@@ -894,7 +894,7 @@ class ProteinMPNN(nn.Module):
         h_V_stack = [h_V] + [torch.zeros_like(h_V, device=device) for _ in range(len(self.decoder_layers))]
         constant = torch.tensor(omit_AAs_np, device=device)
         constant_bias = torch.tensor(bias_AAs_np, device=device)
-        #chain_mask_combined = chain_mask*chain_M_pos 
+        #chain_mask_combined = chain_mask*chain_M_pos
         omit_AA_mask_flag = omit_AA_mask != None
 
         h_EX_encoder = cat_neighbors_nodes(torch.zeros_like(h_S), h_E, E_idx)
@@ -919,7 +919,7 @@ class ProteinMPNN(nn.Module):
                     h_V_t = torch.gather(h_V_stack[l], 1, t[:,None,None].repeat(1,1,h_V_stack[l].shape[-1]))
                     h_ESV_t = torch.gather(mask_bw, 1, t[:,None,None,None].repeat(1,1,mask_bw.shape[-2], mask_bw.shape[-1])) * h_ESV_decoder_t + h_EXV_encoder_t
                     h_V_stack[l+1].scatter_(1, t[:,None,None].repeat(1,1,h_V.shape[-1]), layer(h_V_t, h_ESV_t, mask_V=mask_t))
-                    
+
                 # Sampling step
                 h_V_t = torch.gather(h_V_stack[-1], 1, t[:,None,None].repeat(1,1,h_V_stack[-1].shape[-1]))[:,0]
                 logits = self.W_out(h_V_t) / temperature
@@ -951,7 +951,7 @@ class ProteinMPNN(nn.Module):
         output_dict = {"S": S, "probs": all_probs, "decoding_order": decoding_order}
         return output_dict
 
-    def tied_sample(self, X, randn, S_true, chain_mask, chain_encoding_all, residue_idx, mask=None, temperature=1.0, omit_AAs_np=None, bias_AAs_np=None, chain_M_pos=None, omit_AA_mask=None, 
+    def tied_sample(self, X, randn, S_true, chain_mask, chain_encoding_all, residue_idx, mask=None, temperature=1.0, omit_AAs_np=None, bias_AAs_np=None, chain_M_pos=None, omit_AA_mask=None,
                     pssm_coef=None, pssm_bias=None, pssm_multi=None, pssm_log_odds_flag=None, pssm_log_odds_mask=None, pssm_bias_flag=None, tied_pos=None, tied_beta=None, bias_by_res=None, invert_probs=False, bidir=False, bidir_table_dir=None):
         device = X.device
         if bidir:
@@ -1011,20 +1011,19 @@ class ProteinMPNN(nn.Module):
                         S[:,t] = S_t
                     done_flag = True
                     break
-                else:
-                    E_idx_t = E_idx[:,t:t+1,:]
-                    h_E_t = h_E[:,t:t+1,:,:]
-                    h_ES_t = cat_neighbors_nodes(h_S, h_E_t, E_idx_t)
-                    h_EXV_encoder_t = h_EXV_encoder_fw[:,t:t+1,:,:]
-                    mask_t = mask[:,t:t+1]
-                    for l, layer in enumerate(self.decoder_layers):
-                        h_ESV_decoder_t = cat_neighbors_nodes(h_V_stack[l], h_ES_t, E_idx_t)
-                        h_V_t = h_V_stack[l][:,t:t+1,:]
-                        h_ESV_t = mask_bw[:,t:t+1,:,:] * h_ESV_decoder_t + h_EXV_encoder_t
-                        h_V_stack[l+1][:,t,:] = layer(h_V_t, h_ESV_t, mask_V=mask_t).squeeze(1)
-                    h_V_t = h_V_stack[-1][:,t,:]
-                    logit_list.append((self.W_out(h_V_t) / temperature)/len(t_list))
-                    logits += tied_beta[t]*(self.W_out(h_V_t) / temperature)/len(t_list)
+                E_idx_t = E_idx[:,t:t+1,:]
+                h_E_t = h_E[:,t:t+1,:,:]
+                h_ES_t = cat_neighbors_nodes(h_S, h_E_t, E_idx_t)
+                h_EXV_encoder_t = h_EXV_encoder_fw[:,t:t+1,:,:]
+                mask_t = mask[:,t:t+1]
+                for l, layer in enumerate(self.decoder_layers):
+                    h_ESV_decoder_t = cat_neighbors_nodes(h_V_stack[l], h_ES_t, E_idx_t)
+                    h_V_t = h_V_stack[l][:,t:t+1,:]
+                    h_ESV_t = mask_bw[:,t:t+1,:,:] * h_ESV_decoder_t + h_EXV_encoder_t
+                    h_V_stack[l+1][:,t,:] = layer(h_V_t, h_ESV_t, mask_V=mask_t).squeeze(1)
+                h_V_t = h_V_stack[-1][:,t,:]
+                logit_list.append((self.W_out(h_V_t) / temperature)/len(t_list))
+                logits += tied_beta[t]*(self.W_out(h_V_t) / temperature)/len(t_list)
             if done_flag:
                 pass
             else:
@@ -1169,12 +1168,12 @@ class ProteinMPNN(nn.Module):
 
         # NOTE: to return other scores, just add them to this output dict and parse them later with EvoPro
         output_dict = {
-            "S": S, 
-            "probs": all_probs, 
+            "S": S,
+            "probs": all_probs,
             "decoding_order": decoding_order
         }
 
-        return output_dict                          
+        return output_dict
 
     def conditional_probs(self, X, S, mask, chain_M, residue_idx, chain_encoding_all, randn, backbone_only=False):
         """ Graph-conditioned sequence model """
@@ -1200,7 +1199,7 @@ class ProteinMPNN(nn.Module):
 
 
         chain_M = chain_M*mask #update chain_M to include missing regions
-  
+
         chain_M_np = chain_M.cpu().numpy()
         idx_to_loop = np.argwhere(chain_M_np[0,:]==1)[:,0]
         log_conditional_probs = torch.zeros([X.shape[0], chain_M.shape[1], 21], device=device).float()
@@ -1225,7 +1224,7 @@ class ProteinMPNN(nn.Module):
 
             h_EXV_encoder_fw = mask_fw * h_EXV_encoder
             for layer in self.decoder_layers:
-                # Masked positions attend to encoder information, unmasked see. 
+                # Masked positions attend to encoder information, unmasked see.
                 h_ESV = cat_neighbors_nodes(h_V, h_ES, E_idx)
                 h_ESV = mask_bw * h_ESV + h_EXV_encoder_fw
                 h_V = layer(h_V, h_ESV, mask)
@@ -1301,7 +1300,7 @@ class ProteinMPNN(nn.Module):
 
         # compile all N possible permutations of the two lists [N, 2]
         # for lists of size A and B, N = A x B
-        prod = torch.cat([torch.cartesian_prod(positions_1, positions_2), 
+        prod = torch.cat([torch.cartesian_prod(positions_1, positions_2),
                           torch.cartesian_prod(positions_2, positions_1)], dim=0)
         output_dict_list = []
         log_probs_list = []
@@ -1314,7 +1313,7 @@ class ProteinMPNN(nn.Module):
             chain_mask_perm = torch.zeros_like(chain_mask, dtype=torch.float32)
             chain_mask_perm[:, perm[0]] = 1.
             chain_mask_perm[:, perm[1]] = 2.
-            
+
             decoding_order = torch.argsort((chain_mask_perm+0.0001)*(torch.abs(randn))) #[numbers will be smaller for places where chain_M = 0.0 and higher for places where chain_M = 1.0]
             chain_mask_perm[:, perm[1]] = 1.
             chain_mask = chain_mask_perm
@@ -1335,7 +1334,7 @@ class ProteinMPNN(nn.Module):
             h_V_stack = [h_V] + [torch.zeros_like(h_V, device=device) for _ in range(len(self.decoder_layers))]
             constant = torch.tensor(omit_AAs_np, device=device)
             constant_bias = torch.tensor(bias_AAs_np, device=device)
-            #chain_mask_combined = chain_mask*chain_M_pos 
+            #chain_mask_combined = chain_mask*chain_M_pos
             omit_AA_mask_flag = omit_AA_mask != None
 
             h_EX_encoder = cat_neighbors_nodes(torch.zeros_like(h_S), h_E, E_idx)
@@ -1360,7 +1359,7 @@ class ProteinMPNN(nn.Module):
                         h_V_t = torch.gather(h_V_stack[l], 1, t[:,None,None].repeat(1,1,h_V_stack[l].shape[-1]))
                         h_ESV_t = torch.gather(mask_bw, 1, t[:,None,None,None].repeat(1,1,mask_bw.shape[-2], mask_bw.shape[-1])) * h_ESV_decoder_t + h_EXV_encoder_t
                         h_V_stack[l+1].scatter_(1, t[:,None,None].repeat(1,1,h_V.shape[-1]), layer(h_V_t, h_ESV_t, mask_V=mask_t))
-                        
+
                     # Sampling step
                     h_V_t = torch.gather(h_V_stack[-1], 1, t[:,None,None].repeat(1,1,h_V_stack[-1].shape[-1]))[:,0]
                     logits = self.W_out(h_V_t) / temperature

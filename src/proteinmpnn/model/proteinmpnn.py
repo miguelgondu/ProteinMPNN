@@ -7,7 +7,7 @@ predicts amino acid sequences given protein backbone structures.
 from __future__ import annotations
 
 import itertools
-import os
+from pathlib import Path
 
 import numpy as np
 import torch
@@ -15,10 +15,12 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 import proteinmpnn.sample.metropolis as metropolis_sample
-from proteinmpnn.model.featurize import tied_featurize
 from proteinmpnn.model.layers import DecLayer, EncLayer, ProteinFeatures
-from proteinmpnn.model.losses import _scores, scores
-from proteinmpnn.model.utils import _S_to_seq, S_to_seq, cat_neighbors_nodes, gather_nodes
+from proteinmpnn.model.losses import scores
+from proteinmpnn.model.utils import (
+    cat_neighbors_nodes,
+    gather_nodes,
+)
 
 
 class ProteinMPNN(nn.Module):
@@ -142,7 +144,8 @@ class ProteinMPNN(nn.Module):
         if not use_input_decoding_order:
             decoding_order = torch.argsort(
                 (chain_M + 0.0001) * (torch.abs(randn))
-            )  # [numbers will be smaller for places where chain_M = 0.0 and higher for places where chain_M = 1.0]
+            )  # [numbers will be smaller for places where chain_M = 0.0 and
+            # higher for places where chain_M = 1.0]
         mask_size = E_idx.shape[1]
         permutation_matrix_reverse = torch.nn.functional.one_hot(
             decoding_order, num_classes=mask_size
@@ -166,8 +169,7 @@ class ProteinMPNN(nn.Module):
             h_V = layer(h_V, h_ESV, mask)
 
         logits = self.W_out(h_V)
-        log_probs = F.log_softmax(logits, dim=-1)
-        return log_probs
+        return F.log_softmax(logits, dim=-1)
 
     def sample(
         self,
@@ -237,7 +239,8 @@ class ProteinMPNN(nn.Module):
         )  # update chain_M to include missing regions
         decoding_order = torch.argsort(
             (chain_mask + 0.0001) * (torch.abs(randn))
-        )  # [numbers will be smaller for places where chain_M = 0.0 and higher for places where chain_M = 1.0]
+        )  # [numbers will be smaller for places where chain_M = 0.0 and
+        # higher for places where chain_M = 1.0]
         mask_size = E_idx.shape[1]
         permutation_matrix_reverse = torch.nn.functional.one_hot(
             decoding_order, num_classes=mask_size
@@ -254,7 +257,6 @@ class ProteinMPNN(nn.Module):
         mask_fw = mask_1D * (1.0 - mask_attend)
 
         N_batch, N_nodes = X.size(0), X.size(1)
-        log_probs = torch.zeros((N_batch, N_nodes, 21), device=device)
         all_probs = torch.zeros(
             (N_batch, N_nodes, 21), device=device, dtype=torch.float32
         )
@@ -400,8 +402,7 @@ class ProteinMPNN(nn.Module):
             temp1 = self.W_s(S_t)
             h_S.scatter_(1, t[:, None, None].repeat(1, 1, temp1.shape[-1]), temp1)
             S.scatter_(1, t[:, None], S_t)
-        output_dict = {"S": S, "probs": all_probs, "decoding_order": decoding_order}
-        return output_dict
+        return {"S": S, "probs": all_probs, "decoding_order": decoding_order}
 
     def tied_sample(
         self,
@@ -447,8 +448,14 @@ class ProteinMPNN(nn.Module):
         """
         device = X.device
         if bidir:
+            if not isinstance(bidir_table_dir, (str, Path)):
+                raise ValueError("Asked for bidirectional, but no table dir was given.")
+
+            if isinstance(bidir_table_dir, str):
+                bidir_table_dir = Path(bidir_table_dir)
+
             bidir_filter = torch.load(
-                os.path.join(bidir_table_dir, "bidir_table.pt"), map_location=device
+                bidir_table_dir / "bidir_table.pt", map_location=device
             )
         # Prepare node and edge embeddings
         E, E_idx = self.features(X, mask, residue_idx, chain_encoding_all)
@@ -466,7 +473,8 @@ class ProteinMPNN(nn.Module):
         )  # update chain_M to include missing regions
         decoding_order = torch.argsort(
             (chain_mask + 0.0001) * (torch.abs(randn))
-        )  # [numbers will be smaller for places where chain_M = 0.0 and higher for places where chain_M = 1.0]
+        )  # [numbers will be smaller for places where chain_M = 0.0 and
+        # higher for places where chain_M = 1.0]
         new_decoding_order = []
         for t_dec in list(decoding_order[0,].cpu().data.numpy()):
             if t_dec not in list(itertools.chain(*new_decoding_order)):
@@ -498,7 +506,6 @@ class ProteinMPNN(nn.Module):
         mask_fw = mask_1D * (1.0 - mask_attend)
 
         N_batch, N_nodes = X.size(0), X.size(1)
-        log_probs = torch.zeros((N_batch, N_nodes, 21), device=device)
         all_probs = torch.zeros(
             (N_batch, N_nodes, 21), device=device, dtype=torch.float32
         )
@@ -527,36 +534,31 @@ class ProteinMPNN(nn.Module):
                         S[:, t] = S_t
                     done_flag = True
                     break
-                else:
-                    E_idx_t = E_idx[:, t : t + 1, :]
-                    h_E_t = h_E[:, t : t + 1, :, :]
-                    h_ES_t = cat_neighbors_nodes(h_S, h_E_t, E_idx_t)
-                    h_EXV_encoder_t = h_EXV_encoder_fw[:, t : t + 1, :, :]
-                    mask_t = mask[:, t : t + 1]
-                    for l, layer in enumerate(self.decoder_layers):
-                        h_ESV_decoder_t = cat_neighbors_nodes(
-                            h_V_stack[l], h_ES_t, E_idx_t
-                        )
-                        h_V_t = h_V_stack[l][:, t : t + 1, :]
-                        h_ESV_t = (
-                            mask_bw[:, t : t + 1, :, :] * h_ESV_decoder_t
-                            + h_EXV_encoder_t
-                        )
-                        h_V_stack[l + 1][:, t, :] = layer(
-                            h_V_t, h_ESV_t, mask_V=mask_t
-                        ).squeeze(1)
-                    h_V_t = h_V_stack[-1][:, t, :]
-                    logit_list.append((self.W_out(h_V_t) / temperature) / len(t_list))
-                    logits += (
-                        tied_beta[t] * (self.W_out(h_V_t) / temperature) / len(t_list)
+                E_idx_t = E_idx[:, t : t + 1, :]
+                h_E_t = h_E[:, t : t + 1, :, :]
+                h_ES_t = cat_neighbors_nodes(h_S, h_E_t, E_idx_t)
+                h_EXV_encoder_t = h_EXV_encoder_fw[:, t : t + 1, :, :]
+                mask_t = mask[:, t : t + 1]
+                for l, layer in enumerate(self.decoder_layers):
+                    h_ESV_decoder_t = cat_neighbors_nodes(h_V_stack[l], h_ES_t, E_idx_t)
+                    h_V_t = h_V_stack[l][:, t : t + 1, :]
+                    h_ESV_t = (
+                        mask_bw[:, t : t + 1, :, :] * h_ESV_decoder_t + h_EXV_encoder_t
                     )
+                    h_V_stack[l + 1][:, t, :] = layer(
+                        h_V_t, h_ESV_t, mask_V=mask_t
+                    ).squeeze(1)
+                h_V_t = h_V_stack[-1][:, t, :]
+                logit_list.append((self.W_out(h_V_t) / temperature) / len(t_list))
+                logits += tied_beta[t] * (self.W_out(h_V_t) / temperature) / len(t_list)
             if done_flag:
                 pass
             else:
                 # bidirectional coding using modified tied_sample
                 if bidir and len(logit_list) == 2 and bidir_table_dir:
                     b1, b2 = t_list  # need to keep the positions for bias terms
-                    # calculate all combinations of logits by addition (less harsh than multiplying)
+                    # calculate all combinations of logits by addition (less
+                    # harsh than multiplying)
                     a, b = torch.flatten(logit_list[0]), torch.flatten(logit_list[1])
                     probs = a.unsqueeze(1) + b.unsqueeze(0)
 
@@ -579,7 +581,8 @@ class ProteinMPNN(nn.Module):
                         + square_bias_by_res_gathered / temperature
                     )
                     probs = F.softmax(probs, dim=-1)
-                    # for all bias terms, they again need to be squared into 2D - this is blunt but works
+                    # for all bias terms, they again need to be squared into 2D - this
+                    # is blunt but works
                     if pssm_bias_flag:
                         pssm_coef_gathered = torch.outer(
                             pssm_coef[:, b1], pssm_coef[:, b2]
@@ -620,22 +623,27 @@ class ProteinMPNN(nn.Module):
                     # need to flatten probs for easier softmax and sampling operations
                     flat_probs = torch.flatten(probs)  # [441]
 
-                    # sampling options from the multinomial distribution based on probs weighting
+                    # sampling options from the multinomial distribution based
+                    # on probs weighting
                     probs = probs.squeeze()
                     p_shape = probs.shape
                     try:
                         S_t_repeat = torch.multinomial(flat_probs, 1).squeeze(-1)
                     except RuntimeError:
                         print(
-                            "***  Invalid multinomial distribution (sum of probabilities <= 0). This means there is NO valid bidirectional AA combo to choose from - check your AA constraints  ***"
+                            "*** Invalid multinomial distribution (sum of probabilities"
+                            " <= 0). This means there is NO valid bidirect. AA combo"
+                            " to choose from - check your AA constraints  ***"
                         )
                         quit()
-                    # extract idx of each AA from prob sampling by reverse-engineering the flatten operation
+                    # extract idx of each AA from prob sampling by reverse-engineering
+                    # the flatten operation
                     prob_b = S_t_repeat % p_shape[0]
                     prob_a = (S_t_repeat - prob_b) / p_shape[0]
                     combo_prob = probs[prob_a.long(), prob_b.long()]
 
-                    # need to handle each half of the tied pair separately, since they can be different AAs
+                    # need to handle each half of the tied pair separately, since
+                    # they can be different AAs
                     for t, p_idx in zip(t_list, [prob_a, prob_b]):
                         S_t_repeat = (
                             chain_mask[:, t] * p_idx
@@ -683,8 +691,7 @@ class ProteinMPNN(nn.Module):
                         h_S[:, t, :] = self.W_s(S_t_repeat)
                         S[:, t] = S_t_repeat
                         all_probs[:, t, :] = probs.float()
-        output_dict = {"S": S, "probs": all_probs, "decoding_order": decoding_order}
-        return output_dict
+        return {"S": S, "probs": all_probs, "decoding_order": decoding_order}
 
     def mcmc_sample(self, X, mask, residue_idx, chain_encoding_all, temperature=1.0):
         """Bidirectional sequence sampler using MCMC based sampler."""
@@ -706,13 +713,13 @@ class ProteinMPNN(nn.Module):
         h_EX_encoder = cat_neighbors_nodes(torch.zeros_like(h_V), h_E, E_idx)
         h_EXV_encoder = cat_neighbors_nodes(h_V, h_EX_encoder, E_idx)
 
-        # NOTE: this is the key variable that makes it a one-shot decoder - all seq info is masked out
+        # NOTE: this is the key variable that makes it a one-shot decoder - all
+        # seq info is masked out
         order_mask_backward = torch.zeros(
             [X.shape[0], X.shape[1], X.shape[1]], device=device
         )
         mask_attend = torch.gather(order_mask_backward, 2, E_idx).unsqueeze(-1)
         mask_1D = mask.view([mask.size(0), mask.size(1), 1, 1])
-        mask_bw = mask_1D * mask_attend
         mask_fw = mask_1D * (1.0 - mask_attend)
 
         h_EXV_encoder_fw = mask_fw * h_EXV_encoder
@@ -730,7 +737,8 @@ class ProteinMPNN(nn.Module):
             prob_chain_list.append(probs[chain_encoding_all == chain_idx])
 
         # prob_chain_list is a list of tensors of length number_of_chains (e.g., 2)
-        # each tensor is a seti of probabilities of shape [L, 21] where L s the length of that chain
+        # each tensor is a seti of probabilities of shape [L, 21] where L is
+        # the length of that chain
         (
             out_list1,
             out_list2,
@@ -760,10 +768,9 @@ class ProteinMPNN(nn.Module):
             .repeat(S.shape[0], 1)
         )
 
-        # NOTE: to return other scores, just add them to this output dict and parse them later with EvoPro
-        output_dict = {"S": S, "probs": all_probs, "decoding_order": decoding_order}
-
-        return output_dict
+        # NOTE: to return other scores, just add them to this output dict and parse
+        # them later with EvoPro
+        return {"S": S, "probs": all_probs, "decoding_order": decoding_order}
 
     def conditional_probs(
         self,
@@ -816,7 +823,8 @@ class ProteinMPNN(nn.Module):
                 order_mask[idx] = 1.0
             decoding_order = torch.argsort(
                 (order_mask[None,] + 0.0001) * (torch.abs(randn))
-            )  # [numbers will be smaller for places where chain_M = 0.0 and higher for places where chain_M = 1.0]
+            )  # [numbers will be smaller for places where chain_M = 0.0 and
+            # higher for places where chain_M = 1.0]
             mask_size = E_idx.shape[1]
             permutation_matrix_reverse = torch.nn.functional.one_hot(
                 decoding_order, num_classes=mask_size
@@ -867,7 +875,6 @@ class ProteinMPNN(nn.Module):
         )
         mask_attend = torch.gather(order_mask_backward, 2, E_idx).unsqueeze(-1)
         mask_1D = mask.view([mask.size(0), mask.size(1), 1, 1])
-        mask_bw = mask_1D * mask_attend
         mask_fw = mask_1D * (1.0 - mask_attend)
 
         h_EXV_encoder_fw = mask_fw * h_EXV_encoder
@@ -875,8 +882,7 @@ class ProteinMPNN(nn.Module):
             h_V = layer(h_V, h_EXV_encoder_fw, mask)
 
         logits = self.W_out(h_V)
-        log_probs = F.log_softmax(logits, dim=-1)
-        return log_probs
+        return F.log_softmax(logits, dim=-1)
 
     def pairwise_sample(
         self,
@@ -902,7 +908,8 @@ class ProteinMPNN(nn.Module):
         invert_probs=False,
     ):
         """
-        Samples all possible permutations of two position lists and keeps the best combination of mutations.
+        Samples all possible permutations of two position lists and keeps
+        the best combination of mutations.
         EXPERIMENTAL.
         """
 
@@ -961,7 +968,8 @@ class ProteinMPNN(nn.Module):
 
             decoding_order = torch.argsort(
                 (chain_mask_perm + 0.0001) * (torch.abs(randn))
-            )  # [numbers will be smaller for places where chain_M = 0.0 and higher for places where chain_M = 1.0]
+            )  # [numbers will be smaller for places where chain_M = 0.0 and
+            # higher for places where chain_M = 1.0]
             chain_mask_perm[:, perm[1]] = 1.0
             chain_mask = chain_mask_perm
 
@@ -1139,7 +1147,8 @@ class ProteinMPNN(nn.Module):
                 S.scatter_(1, t[:, None], S_t)
                 # scores = scores.cpu().data.numpy()
             output_dict = {"S": S, "probs": all_probs, "decoding_order": decoding_order}
-            # obtain score from each sequence by passing FULL sequence through forward fxn
+            # obtain score from each sequence by passing FULL sequence
+            # through forward fxn
             log_probs = self(
                 X,
                 S,

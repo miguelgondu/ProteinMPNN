@@ -1,15 +1,27 @@
-import os
-import numpy as np
-import time
-import torch
-import json
 import copy
-from protein_mpnn.protein_mpnn_utils import ProteinMPNN, tied_featurize, _scores, _S_to_seq
-from mpnn_utils import determine_weight_directory, MODEL_CONFIG, MODEL_NAMES, get_pdb_dataset, transform_inputs
+import os
+import time
+
+import numpy as np
+import torch
 from generate_json import FileArgumentParser
+from mpnn_utils import (
+    MODEL_CONFIG,
+    MODEL_NAMES,
+    determine_weight_directory,
+    get_pdb_dataset,
+    transform_inputs,
+)
+from protein_mpnn.protein_mpnn_utils import (
+    ProteinMPNN,
+    _S_to_seq,
+    _scores,
+    tied_featurize,
+)
+
 
 def parse_args_from_file(mpnn_flags_file, parser):
-        
+
     try:
         # Prepend @ to the filename to tell argparse this is an arguments file
         args = parser.parse_args(['@' + mpnn_flags_file])
@@ -17,12 +29,12 @@ def parse_args_from_file(mpnn_flags_file, parser):
     except FileNotFoundError:
         raise FileNotFoundError(f"Arguments file not found: {mpnn_flags_file}")
     except Exception as e:
-        raise ValueError(f"Error parsing arguments file: {str(e)}")   
-    
-def get_arguments(mpnn_flags_file): 
+        raise ValueError(f"Error parsing arguments file: {str(e)}")
+
+def get_arguments(mpnn_flags_file):
     parser = FileArgumentParser(fromfile_prefix_chars='@')
 
-    parser.add_argument("--model_name", 
+    parser.add_argument("--model_name",
                         type=str, default="v_48_020",
                         choices=MODEL_NAMES,
                         help="ProteinMPNN model name. E.g. "
@@ -32,7 +44,7 @@ def get_arguments(mpnn_flags_file):
     parser.add_argument("--batch_size", type=int, default=1, help="Batch size; can set higher for titan, quadro GPUs, reduce this if running out of GPU memory")
     parser.add_argument("--sampling_temp", type=str, default="0.1", help="A string of temperatures, 0.2 0.25 0.5. Sampling temperature for amino acids, T=0.0 means taking argmax, T>>1.0 means sample randomly. Suggested values 0.1, 0.15, 0.2, 0.25, 0.3. Higher values will lead to more diversity.")
     parser.add_argument("--destabilize", action="store_true", help="Include to invert aa probabilities by making less favored amino acids more common.")
-    
+
     parser.add_argument("--out_folder", type=str, help="Path to a folder to output sequences, e.g. /home/out/")
     parser.add_argument("--pdb_dir", type=str, default='', help="Path to a single PDB to be designed")
     parser.add_argument("--design_specs_json", type=str, help="Path to a folder with parsed pdb into jsonl")
@@ -46,25 +58,25 @@ def get_arguments(mpnn_flags_file):
     parser.add_argument('--dump_all_probs', action='store_true', help='If enabled, a file (probs.pkl) containing the aa probabilities at each position is saved.')
     parser.add_argument('--mcmc', action='store_true', help='If enabled, bidirectional coding uses MCMC routine. Must have --bidirectional flag enabled.')
     args = parse_args_from_file(mpnn_flags_file, parser)
-    
+
     return args
 
 def main(mpnn_flags_file, design_run=True, json_data=None, pdb_paths=None):
-    
-    #pdb_dir, design_specs_json, model_name="v_48_020", backbone_noise=0.00, 
-    # num_seq_per_target=1, batch_size=1, sampling_temp="0.1", af2_formatted_output=False, 
+
+    #pdb_dir, design_specs_json, model_name="v_48_020", backbone_noise=0.00,
+    # num_seq_per_target=1, batch_size=1, sampling_temp="0.1", af2_formatted_output=False,
     # bidir=False, bias_AA_dict=None, bias_by_res_dict=None, dump_probs=False
-    
+
     args = get_arguments(mpnn_flags_file)
     #create directory to write pdb files
     pdb_dir = "MPNN_pdbs"
     if not os.path.exists(pdb_dir):
         os.makedirs(pdb_dir)
-    
+
     for p in pdb_paths:
         if os.path.exists(p):
             os.system(f"cp {p} {pdb_dir}")
-    
+
     # Extract hyperparameters from model config
     hidden_dim = MODEL_CONFIG['hidden_dim']
     num_layers = MODEL_CONFIG['num_layers']
@@ -125,9 +137,9 @@ def main(mpnn_flags_file, design_run=True, json_data=None, pdb_paths=None):
             print(chain_id_dict, '\n', fixed_positions_dict, '\n', pssm_dict, '\n',
                   omit_AA_dict, '\n', tied_positions_dict, '\n', args.bias_by_res_dict)
             print('=' * 50)
-            
+
             # quit()
-            
+
             X, S, mask, _, chain_M, chain_encoding_all, _, visible_list_list, masked_list_list, masked_chain_length_list_list, chain_M_pos, omit_AA_mask, residue_idx, _, tied_pos_list_of_lists_list, pssm_coef, pssm_bias, pssm_log_odds_all, bias_by_res_all, tied_beta = tied_featurize(batch_clones, device, chain_id_dict, fixed_positions_dict, omit_AA_dict, tied_positions_dict, pssm_dict, args.bias_by_res_dict)
 
             # Setting pssm threshold to 0 for now. TODO: CHANGE LATER
@@ -155,24 +167,24 @@ def main(mpnn_flags_file, design_run=True, json_data=None, pdb_paths=None):
                     pssm_log_odds_flag = 0
                     pssm_bias_flag = 0
                     if tied_positions_dict == None:
-                        sample_dict = model.sample(X, randn_2, S, chain_M, chain_encoding_all, 
-                                                   residue_idx, mask=mask, temerature=temp, 
-                                                   omit_AAs_np=omit_AAs_np, bias_AAs_np=bias_AAs_np, 
-                                                   chain_M_pos=chain_M_pos, omit_AA_mask=omit_AA_mask, 
-                                                   pssm_coef=pssm_coef, pssm_bias=pssm_bias, pssm_multi=pssm_multi, 
-                                                   pssm_log_odds_flag=bool(pssm_log_odds_flag), 
-                                                   pssm_log_odds_mask=pssm_log_odds_mask, 
+                        sample_dict = model.sample(X, randn_2, S, chain_M, chain_encoding_all,
+                                                   residue_idx, mask=mask, temerature=temp,
+                                                   omit_AAs_np=omit_AAs_np, bias_AAs_np=bias_AAs_np,
+                                                   chain_M_pos=chain_M_pos, omit_AA_mask=omit_AA_mask,
+                                                   pssm_coef=pssm_coef, pssm_bias=pssm_bias, pssm_multi=pssm_multi,
+                                                   pssm_log_odds_flag=bool(pssm_log_odds_flag),
+                                                   pssm_log_odds_mask=pssm_log_odds_mask,
                                                    pssm_bias_flag=bool(pssm_bias_flag), bias_by_res=bias_by_res_all)
                     elif args.mcmc: # MCMC based bidirectional sampling
-                        sample_dict = model.mcmc_sample(X, mask, residue_idx, chain_encoding_all, temperature=temp)        
+                        sample_dict = model.mcmc_sample(X, mask, residue_idx, chain_encoding_all, temperature=temp)
                     else:
-                        sample_dict = model.tied_sample(X, randn_2, S, chain_M, chain_encoding_all, residue_idx, mask=mask, 
-                                                        temperature=temp, omit_AAs_np=omit_AAs_np, bias_AAs_np=bias_AAs_np, 
-                                                        chain_M_pos=chain_M_pos, omit_AA_mask=omit_AA_mask, pssm_coef=pssm_coef, 
-                                                        pssm_bias=pssm_bias, pssm_multi=pssm_multi, 
-                                                        pssm_log_odds_flag=bool(pssm_log_odds_flag), 
-                                                        pssm_log_odds_mask=pssm_log_odds_mask, pssm_bias_flag=bool(pssm_bias_flag), 
-                                                        tied_pos=tied_pos_list_of_lists_list[0], tied_beta=tied_beta, 
+                        sample_dict = model.tied_sample(X, randn_2, S, chain_M, chain_encoding_all, residue_idx, mask=mask,
+                                                        temperature=temp, omit_AAs_np=omit_AAs_np, bias_AAs_np=bias_AAs_np,
+                                                        chain_M_pos=chain_M_pos, omit_AA_mask=omit_AA_mask, pssm_coef=pssm_coef,
+                                                        pssm_bias=pssm_bias, pssm_multi=pssm_multi,
+                                                        pssm_log_odds_flag=bool(pssm_log_odds_flag),
+                                                        pssm_log_odds_mask=pssm_log_odds_mask, pssm_bias_flag=bool(pssm_bias_flag),
+                                                        tied_pos=tied_pos_list_of_lists_list[0], tied_beta=tied_beta,
                                                         bias_by_res=bias_by_res_all, bidir=args.bidirectional, bidir_table_dir=model_weight_dir)
                     S_sample = sample_dict["S"]
                     log_probs = model(X, S_sample, mask, chain_M*chain_M_pos, residue_idx, chain_encoding_all, randn_2, use_input_decoding_order=True, decoding_order=sample_dict["decoding_order"])

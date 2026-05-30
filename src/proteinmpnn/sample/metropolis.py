@@ -1,8 +1,10 @@
+import contextlib
+import csv
+import time
+from pathlib import Path
+
 import numpy as np
 import torch
-import time
-import csv
-import os
 
 
 def BPs_to_AAs(fwd_sequence, rev_sequence, num_codons, shift):
@@ -49,7 +51,8 @@ def sample_all(
     new_fwd_sequenceC = fwd_sequence[:position] + "C" + fwd_sequence[position + 1 :]
     new_fwd_sequenceG = fwd_sequence[:position] + "G" + fwd_sequence[position + 1 :]
 
-    # Calculates the reverse compliment position and generates the corresponding sequences
+    # Calculates the reverse compliment position and generates
+    # the corresponding sequences
     rev_position = num_nas - position - 1
     new_rev_sequenceA = (
         rev_sequence[:rev_position] + "T" + rev_sequence[rev_position + 1 :]
@@ -169,7 +172,8 @@ def sample_all_same_strand(
     new_fwd_sequenceC = fwd_sequence[:position] + "C" + fwd_sequence[position + 1 :]
     new_fwd_sequenceG = fwd_sequence[:position] + "G" + fwd_sequence[position + 1 :]
 
-    # Calculates the reverse compliment position and generates the corresponding sequences
+    # Calculates the reverse compliment position and generates
+    # the corresponding sequences
     new_rev_sequenceA = (
         fwd_sequence[shift:position]
         + "A"
@@ -349,10 +353,12 @@ def score(
 
     if debug:
         print(
-            f"[DEBUG] fwd_idx={fwd_idx}, fwd_codon={seq1[fwd_idx*3:fwd_idx*3+3]}, sa1={sa1[fwd_idx]}"
+            f"[DEBUG] fwd_idx={fwd_idx}, fwd_codon={seq1[fwd_idx*3:fwd_idx*3+3]}, "
+            f"sa1={sa1[fwd_idx]}"
         )
         print(
-            f"[DEBUG] rev_idx={rev_idx}, rev_codon={seq2[rev_idx*3:rev_idx*3+3]}, sa2={sa2[rev_idx]}"
+            f"[DEBUG] rev_idx={rev_idx}, rev_codon={seq2[rev_idx*3:rev_idx*3+3]}, "
+            f"sa2={sa2[rev_idx]}"
         )
 
     return sa1, sa2
@@ -461,8 +467,8 @@ def na_sample(probs1, probs2):
     max_score1 = torch.sum(torch.max(probs1, axis=-1))
     max_score2 = torch.sum(torch.max(probs2, axis=-1))
     """
-    metro_file = os.path.join(os.getcwd(), "metro.flags")
-    if not os.path.isfile(metro_file):
+    metro_file = Path.cwd() / "metro.flags"
+    if not metro_file.is_file():
         raise ValueError(f"Missing flag file expected at {metro_file}")
     (
         strand,
@@ -480,15 +486,7 @@ def na_sample(probs1, probs2):
     if probs1.shape != probs2.shape:
         raise ValueError("Tables must have the same shape")
 
-    if strand == "same":
-        sample_all_function = sample_all_same_strand
-        score_function = score
-    else:
-        sample_all_function = sample_all
-        score_function = score
-
-    # Fill in penalty for stop codon using "X" position in prob arrays
-    stop_penalty = 10000  # should be as large as possible
+    sample_all_function = sample_all_same_strand if strand == "same" else sample_all
 
     # The number of codons in the pair of proteins
     num_codons = probs1.shape[0]
@@ -502,18 +500,6 @@ def na_sample(probs1, probs2):
     else:
         temp_list = [temperature] * num_mutations
 
-    """
-    # Create a random DNA sequence for testing
-    fwd_sequence = ''
-    for NA in range(num_nas):
-        fwd_sequence += np.random.choice(['A', 'T', 'C', 'G'])
-    
-    # Create the reverse complement of the DNA sequence
-    rev_sequence = ''
-    for BP in fwd_sequence[::-1]:
-        rev_sequence += nucleic_acid_complement[BP]
-    """
-
     # Create an all A DNA sequence for testing
     fwd_sequence = "A" * num_nas
     rev_sequence = "T" * num_nas
@@ -521,9 +507,6 @@ def na_sample(probs1, probs2):
     # Do initial scoring for baseline values
     probs1, probs2 = probs1.to("cpu"), probs2.to("cpu")
 
-    # init1 = torch.full((num_codons,), dtype=torch.float, device='cpu', fill_value=torch.inf)
-    # init2 = torch.full((num_codons,), dtype=torch.float, device='cpu', fill_value=torch.inf)
-    # codons = torch.arange(num_codons, dtype=torch.long, device='cpu')
     score_array1, score_array2 = score_all_codons(
         fwd_sequence, rev_sequence, probs1, probs2
     )
@@ -539,7 +522,7 @@ def na_sample(probs1, probs2):
     while not no_z:
         for i in range(num_mutations):
             # only select non-overhanging positions for simplicity
-            position = np.random.randint(0, num_nas)
+            position = np.random.randint(0, num_nas)  # noqa: NPY002
             char = fwd_sequence[position]
 
             score_arrays1, score_arrays2, sequence_list1, sequence_list2 = (
@@ -561,7 +544,8 @@ def na_sample(probs1, probs2):
             scores2 = torch.tensor([torch.sum(arr) for arr in score_arrays2])
             combined_scores = scores1 * scores2
 
-            # Get the indices of the minimum values. After 1000 iterations, disallow accepting the same sequence
+            # Get the indices of the minimum values. After 1000 iterations,
+            # disallow accepting the same sequence
             if i > 1000:
                 combined_scores[base_set.index(char)] = torch.tensor(float("inf"))
 
@@ -569,7 +553,8 @@ def na_sample(probs1, probs2):
                 combined_scores == combined_scores.min()
             ).squeeze()
 
-            # If there are multiple indices with the same minimum value, randomly choose one.
+            # If there are multiple indices with the same minimum value,
+            # randomly choose one.
             if min_indices.dim() > 0:  # If there are multiple indices
                 random_min = min_indices[torch.randint(0, len(min_indices), (1,))]
             else:  # If there's only one index
@@ -590,9 +575,10 @@ def na_sample(probs1, probs2):
                 )
                 best_iter = i
 
-            # If new score is worse we randomly sample a number and use the Metropolis Algorithm to determine if we should accept the new sequence
+            # If new score is worse we randomly sample a number and use the Metropolis
+            # Algorithm to determine if we should accept the new sequence
             elif metropolis:
-                metro_rand = np.random.rand()
+                metro_rand = np.random.rand()  # noqa: NPY002
                 energy = ((combined_scores[random_min]) - score_overall) / score_overall
                 energy = energy.detach().cpu().numpy()
                 metro_score = 1 - np.exp(
@@ -621,33 +607,18 @@ def na_sample(probs1, probs2):
         final_AAs1 = "".join(final_AAs1)
         final_AAs2 = "".join(final_AAs2)
 
-        pos = 0
         out_probs1 = torch.zeros_like(probs1, device="cuda")
-        for char in final_AAs1:
+        for pos, char in enumerate(final_AAs1):
             char = "X" if char == "Z" else char
             out_probs1[pos, amino_acid_position[char]] = 1
-            pos += 1
 
         out_probs2 = torch.zeros_like(probs2, device="cuda")
-        pos = 0
-        for char in final_AAs2:
+        for pos, char in enumerate(final_AAs2):
             char = "X" if char == "Z" else char
             out_probs2[pos, amino_acid_position[char]] = 1
-            pos += 1
 
         # Check if there are any stop codons in the final sequence
         no_z = ("Z" not in final_AAs1) and ("Z" not in final_AAs2)
-        """
-        if rounds >5 and not no_z:
-            print(f'Stop codons found. Removing Zs from sequences: {final_AAs1}, {final_AAs2}')
-            no_z = True
-            fwd_sequence, rev_sequence = z_mutator(fwd_sequence, rev_sequence, num_codons, shift)
-            score_array1, score_array2 = score(fwd_sequence, rev_sequence, probs1, probs2, codons, shift, init1, init2, stop_penalty)
-            score_overall = (score1 * score2)
-            final_AAs1, final_AAs2 = BPs_to_AAs(fwd_sequence, rev_sequence, num_codons, shift)
-            final_AAs1 = ''.join(final_AAs1)
-            final_AAs2 = ''.join(final_AAs2)
-        """
         rounds += 1
 
     elapsed = time.time() - tick
@@ -687,16 +658,19 @@ def na_sample(probs1, probs2):
     )
 
 
-def load_flags(file_path):
+def load_flags(file_path: str | Path):
     """
     Reads arguments from a flags file and returns them as a dictionary.
 
     :param file_path: Path to the flags file (e.g., 'metro.flags').
     :return: A dictionary of parsed key-value pairs.
     """
+    if not isinstance(file_path, Path):
+        file_path = Path(file_path)
+
     args = {}
     try:
-        with open(file_path, "r") as file:
+        with file_path.open() as file:
             for line in file:
                 # Skip empty lines and comments
                 line = line.strip()
@@ -710,10 +684,8 @@ def load_flags(file_path):
                 elif value.isdigit():
                     value = int(value)
                 else:
-                    try:
+                    with contextlib.suppress(ValueError):
                         value = float(value)
-                    except ValueError:
-                        pass  # Keep as string if not a number
                 args[key] = value
     except FileNotFoundError:
         print(f"Error: Flags file '{file_path}' not found.")
@@ -722,7 +694,7 @@ def load_flags(file_path):
     return args
 
 
-def append_to_csv(file_path, data):
+def append_to_csv(file_path: str | Path, data):
     """
     Appends data to an existing CSV file, creating it if necessary.
 
@@ -730,12 +702,13 @@ def append_to_csv(file_path, data):
     file_path (str): Path to the CSV file.
     data (list of lists): Data to append (each sublist is a row).
     """
-    file_exists = os.path.exists(file_path)
+    if not isinstance(file_path, Path):
+        file_path = Path(file_path)
 
-    with open(file_path, mode="a", newline="") as file:
+    with file_path.open(mode="a", newline="") as file:
         writer = csv.writer(file)
 
-        if not file_exists:
+        if not file_path.exists():
             header = [
                 "Final Score 1",
                 "Final Score 2",
@@ -764,7 +737,8 @@ def run_metropolis_from_flags(flags_file):
     shift = args.get("shift", 1)
     overhang_residues = args.get(
         "overhang_residues", 0
-    )  # Number of bases on the 5' and 3' ends of the first and second proteins that do not overlap
+    )  # Number of bases on the 5' and 3' ends of the first and
+    # second proteins that do not overlap
     temperature = args.get(
         "temperature", 0.007
     )  # Accepts ~5 percent of the sampled data
@@ -775,12 +749,16 @@ def run_metropolis_from_flags(flags_file):
     gradient_end = args.get("gradient_end", 0.05)  # Accepts ~1 percent of the data
     num_mutations = args.get(
         "num_mutations", 30000
-    )  # Number of random mutations to introduce to the sequence, should be ~300x the number of Amino Acids
+    )  # Number of random mutations to introduce to the sequence, should
+    # be ~300x the number of Amino Acids
     metropolis = args.get("metropolis", False)  # Use the Metropolis Algorithm
 
     print("Using Updated Version of Metropolis Sampler")
     print(
-        f"Running metropolis with strand={strand}, shift={shift}, temperature={temperature}, use_gradient={use_gradient}, gradient_start={gradient_start}, gradient_end={gradient_end}, num_mutations={num_mutations}, metropolis={metropolis}"
+        f"Running metropolis with strand={strand}, shift={shift}, "
+        f"temperature={temperature}, use_gradient={use_gradient}, "
+        f"gradient_start={gradient_start}, gradient_end={gradient_end}, "
+        f"num_mutations={num_mutations}, metropolis={metropolis}"
     )
     return (
         strand,

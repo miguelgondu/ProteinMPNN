@@ -6,7 +6,9 @@ import torch
 import torch.nn.functional as F
 
 
-def scores(S: torch.Tensor, log_probs: torch.Tensor, mask: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+def scores(
+    S: torch.Tensor, log_probs: torch.Tensor, mask: torch.Tensor
+) -> tuple[torch.Tensor, torch.Tensor]:
     """Compute negative log probability scores for sequences.
 
     Args:
@@ -28,7 +30,9 @@ def scores(S: torch.Tensor, log_probs: torch.Tensor, mask: torch.Tensor) -> tupl
     return scores_val, scores_per_res
 
 
-def loss_nll(S: torch.Tensor, log_probs: torch.Tensor, mask: torch.Tensor) -> tuple[torch.Tensor, torch.Tensor]:
+def loss_nll(
+    S: torch.Tensor, log_probs: torch.Tensor, mask: torch.Tensor
+) -> tuple[torch.Tensor, torch.Tensor]:
     """Compute negative log likelihood loss.
 
     Args:

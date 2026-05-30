@@ -1,8 +1,8 @@
-import argparse 
+import argparse
+
 
 def main(args):
 
-    import numpy as np
     import json
 
     bias_list = [float(item) for item in args.bias_list.split()]

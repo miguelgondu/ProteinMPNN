@@ -1,38 +1,39 @@
 import argparse
-from dateutil import parser
+import glob
+import json
+
 import numpy as np
-import os, time, gzip, json
-import glob 
+
 
 def main(input_path, output_path, ca):
-    
+
     folder_with_pdbs_path = input_path
     save_path = output_path
-    
+
     alpha_1 = list("ARNDCQEGHILKMFPSTWYV-")
     states = len(alpha_1)
     alpha_3 = ['ALA','ARG','ASN','ASP','CYS','GLN','GLU','GLY','HIS','ILE',
                'LEU','LYS','MET','PHE','PRO','SER','THR','TRP','TYR','VAL','GAP']
-    
+
     aa_1_N = {a:n for n,a in enumerate(alpha_1)}
     aa_3_N = {a:n for n,a in enumerate(alpha_3)}
     aa_N_1 = {n:a for n,a in enumerate(alpha_1)}
     aa_1_3 = {a:b for a,b in zip(alpha_1,alpha_3)}
     aa_3_1 = {b:a for a,b in zip(alpha_1,alpha_3)}
-    
+
     def AA_to_N(x):
       # ["ARND"] -> [[0,1,2,3]]
-      x = np.array(x);
+      x = np.array(x)
       if x.ndim == 0: x = x[None]
       return [[aa_1_N.get(a, states-1) for a in y] for y in x]
-    
+
     def N_to_AA(x):
       # [[0,1,2,3]] -> ["ARND"]
-      x = np.array(x);
+      x = np.array(x)
       if x.ndim == 1: x = x[None]
       return ["".join([aa_N_1.get(a,"-") for a in y]) for y in x]
-    
-    
+
+
     def parse_PDB_biounits(x, atoms=['N','CA','C'], chain=None):
       '''
       input:  x = PDB filename
@@ -42,11 +43,11 @@ def main(input_path, output_path, ca):
       xyz,seq,min_resn,max_resn = {},{},1e6,-1e6
       for line in open(x,"rb"):
         line = line.decode("utf-8","ignore").rstrip()
-    
+
         if line[:6] == "HETATM" and line[17:17+3] == "MSE":
           line = line.replace("HETATM","ATOM  ")
           line = line.replace("MSE","MET")
-    
+
         if line[:4] == "ATOM":
           ch = line[21:22]
           if ch == chain or chain is None:
@@ -54,28 +55,28 @@ def main(input_path, output_path, ca):
             resi = line[17:17+3]
             resn = line[22:22+5].strip()
             x,y,z = [float(line[i:(i+8)]) for i in [30,38,46]]
-    
-            if resn[-1].isalpha(): 
+
+            if resn[-1].isalpha():
                 resa,resn = resn[-1],int(resn[:-1])-1
-            else: 
+            else:
                 resa,resn = "",int(resn)-1
     #         resn = int(resn)
-            if resn < min_resn: 
+            if resn < min_resn:
                 min_resn = resn
-            if resn > max_resn: 
+            if resn > max_resn:
                 max_resn = resn
-            if resn not in xyz: 
+            if resn not in xyz:
                 xyz[resn] = {}
-            if resa not in xyz[resn]: 
+            if resa not in xyz[resn]:
                 xyz[resn][resa] = {}
-            if resn not in seq: 
+            if resn not in seq:
                 seq[resn] = {}
-            if resa not in seq[resn]: 
+            if resa not in seq[resn]:
                 seq[resn][resa] = resi
-    
+
             if atom not in xyz[resn][resa]:
               xyz[resn][resa][atom] = np.array([x,y,z])
-    
+
       # convert to numpy arrays, fill in missing values
       seq_,xyz_ = [],[]
       try:
@@ -93,20 +94,20 @@ def main(input_path, output_path, ca):
           return np.array(xyz_).reshape(-1,len(atoms),3), N_to_AA(np.array(seq_))
       except TypeError:
           return 'no_chain', 'no_chain'
-    
-    
-    
+
+
+
     pdb_dict_list = []
     c = 0
-    
+
     if folder_with_pdbs_path[-1]!='/':
         folder_with_pdbs_path = folder_with_pdbs_path+'/'
-    
-    
+
+
     init_alphabet = ['A', 'B', 'C', 'D', 'E', 'F', 'G','H', 'I', 'J','K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S', 'T','U', 'V','W','X', 'Y', 'Z', 'a', 'b', 'c', 'd', 'e', 'f', 'g','h', 'i', 'j','k', 'l', 'm', 'n', 'o', 'p', 'q', 'r', 's', 't','u', 'v','w','x', 'y', 'z']
     extra_alphabet = [str(item) for item in list(np.arange(300))]
     chain_alphabet = init_alphabet + extra_alphabet
-    
+
     biounit_names = glob.glob(folder_with_pdbs_path+'*.pdb')
     for biounit in biounit_names:
         my_dict = {}
@@ -147,14 +148,14 @@ def main(input_path, output_path, ca):
         if s < len(chain_alphabet):
             pdb_dict_list.append(my_dict)
             c+=1
-    
+
     return save_path, pdb_dict_list
 
-def do_write(save_path, pdb_dict_list):      
+def do_write(save_path, pdb_dict_list):
     with open(save_path, 'w') as f:
         for entry in pdb_dict_list:
             f.write(json.dumps(entry) + '\n')
-           
+
 
 if __name__ == "__main__":
     argparser = argparse.ArgumentParser(formatter_class=argparse.ArgumentDefaultsHelpFormatter)

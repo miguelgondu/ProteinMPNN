@@ -6,7 +6,11 @@ import logging
 logging.getLogger("proteinmpnn").addHandler(logging.NullHandler())
 
 # Re-export main classes for convenient imports
-from proteinmpnn.inference import DesignResult, InferenceRunner, SequenceResult
+from proteinmpnn.inference import (  # noqa: E402
+    DesignResult,
+    InferenceRunner,
+    SequenceResult,
+)
 
 __all__ = [
     "InferenceRunner",

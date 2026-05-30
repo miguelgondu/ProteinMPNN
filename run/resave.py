@@ -1,6 +1,7 @@
+import os
+
 import torch
 from protein_mpnn.protein_mpnn_utils import ProteinMPNN
-import os
 
 ckpt_files = os.listdir('model_weights')
 
@@ -21,6 +22,6 @@ for ckpt_file in ckpt_files:
     model_state_dict = model.state_dict()
     ckpt = {'num_edges': num_edges, 'noise_level': noise_level,
             'model_state_dict': model_state_dict}
-    
+
     torch.save(ckpt, os.path.join('new_weights', ckpt_file), _use_new_zipfile_serialization=False)
-    
+

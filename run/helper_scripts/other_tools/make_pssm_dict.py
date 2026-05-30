@@ -1,10 +1,7 @@
-import pandas as pd
-import numpy as np
-
-import glob
-import random
-import numpy as np
 import json
+
+import numpy as np
+import pandas as pd
 
 
 def softmax(x, T):
@@ -43,8 +40,8 @@ X_mask = np.concatenate([np.zeros([1,20]), np.ones([1,1])], -1)
 def softmax(x, T):
     return np.exp(x/T)/np.sum(np.exp(x/T), -1, keepdims=True)
 
-#Load parsed PDBs:  
-with open('/home/justas/projects/cages/parsed/test.jsonl', 'r') as json_file:
+#Load parsed PDBs:
+with open('/home/justas/projects/cages/parsed/test.jsonl') as json_file:
     json_list = list(json_file)
 
 my_dict = {}
@@ -59,6 +56,6 @@ for json_str in json_list:
         pssm_dict[chain]['pssm_log_odds'] = (pssm_log_odds).tolist()
     my_dict[result['name']] = pssm_dict
 
-#Write output to:    
+#Write output to:
 with open('/home/justas/projects/lab_github/mpnn/data/pssm_dict.jsonl', 'w') as f:
     f.write(json.dumps(my_dict) + '\n')

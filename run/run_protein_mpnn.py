@@ -1,24 +1,24 @@
-import os
-import numpy as np
-import time
-import torch
-import json
 import copy
-import pickle
-from protein_mpnn.protein_mpnn_utils import (
-    ProteinMPNN,
-    tied_featurize,
-    _scores,
-    _S_to_seq,
-)
+import json
+import os
+import time
+
+import numpy as np
+import torch
+from generate_json import FileArgumentParser
 from mpnn_utils import (
-    determine_weight_directory,
     MODEL_CONFIG,
     MODEL_NAMES,
+    determine_weight_directory,
     get_pdb_dataset,
     transform_inputs,
 )
-from generate_json import FileArgumentParser
+from protein_mpnn.protein_mpnn_utils import (
+    ProteinMPNN,
+    _S_to_seq,
+    _scores,
+    tied_featurize,
+)
 
 
 def decide_model_weights():
@@ -70,7 +70,7 @@ def run_protein_mpnn(args):
 
     # Load the residue designability specs json
     if os.path.isfile(args.design_specs_json):
-        with open(args.design_specs_json, "r") as json_file:
+        with open(args.design_specs_json) as json_file:
             json_list = json_file.read()
         design_specs_jsons = json_list
     else:
@@ -86,7 +86,7 @@ def run_protein_mpnn(args):
     bias_AAs_np = np.zeros(len(alphabet))
     if args.bias_AA_dict:
         if os.path.isfile(args.bias_AA_dict):
-            with open(args.bias_AA_dict, "r") as json_file:
+            with open(args.bias_AA_dict) as json_file:
                 bias_AA_dict = json.load(json_file)
         for n, AA in enumerate(alphabet):
             if AA in list(bias_AA_dict.keys()):
@@ -95,7 +95,7 @@ def run_protein_mpnn(args):
     bias_by_res_dict = None
     if args.bias_by_res_dict:
         if os.path.isfile(args.bias_by_res_dict):
-            with open(args.bias_by_res_dict, "r") as json_file:
+            with open(args.bias_by_res_dict) as json_file:
                 bias_by_res_dict = json.load(json_file)
 
     # Load the checkpoint and set up model
@@ -392,14 +392,7 @@ def run_protein_mpnn(args):
                                     precision=4,
                                 )
                                 f.write(
-                                    ">{}, score={}, fixed_chains={}, designed_chains={}, model_name={}\n{}\n".format(
-                                        name_,
-                                        native_score_print,
-                                        print_visible_chains,
-                                        print_masked_chains,
-                                        args.model_name,
-                                        native_seq,
-                                    )
+                                    f">{name_}, score={native_score_print}, fixed_chains={print_visible_chains}, designed_chains={print_masked_chains}, model_name={args.model_name}\n{native_seq}\n"
                                 )  # write the native sequence
 
                                 # FOR NATIVE SEQUENCES
@@ -484,15 +477,7 @@ def run_protein_mpnn(args):
                                                 )
                                             )
                                             fsp.write(
-                                                ">{}, fixed_chains={}, designed_chains={}, state_score={}, scores_per_chain={}, model={}\n{}\n".format(
-                                                    fbase,
-                                                    print_visible_chains,
-                                                    chains_original,
-                                                    score_per_state,
-                                                    scores_per_chain,
-                                                    args.model_name,
-                                                    native_seq_split,
-                                                )
+                                                f">{fbase}, fixed_chains={print_visible_chains}, designed_chains={chains_original}, state_score={score_per_state}, scores_per_chain={scores_per_chain}, model={args.model_name}\n{native_seq_split}\n"
                                             )
 
                                             if args.af2_formatted_output:
@@ -547,9 +532,7 @@ def run_protein_mpnn(args):
                                 precision=4,
                             )
                             f.write(
-                                ">T={}, sample={}, score={}, seq_recovery={}\n{}\n".format(
-                                    temp, b_ix, score_print, seq_rec_print, seq
-                                )
+                                f">T={temp}, sample={b_ix}, score={score_print}, seq_recovery={seq_rec_print}\n{seq}\n"
                             )  # write generated sequence
 
                             # FOR DESIGNED SEQUENCES
@@ -660,16 +643,7 @@ def run_protein_mpnn(args):
                                             )
                                         )
                                         fsp.write(
-                                            ">{}, sample={}, state_score={}, scores_per_chain={}, state_recovery={}, seq_recovery_per_chain={}, model={}\n{}\n".format(
-                                                fbase,
-                                                b_ix,
-                                                score_per_state,
-                                                scores_per_chain,
-                                                seq_recovery_per_state,
-                                                seq_recovery_per_chain,
-                                                args.model_name,
-                                                seq_split,
-                                            )
+                                            f">{fbase}, sample={b_ix}, state_score={score_per_state}, scores_per_chain={scores_per_chain}, state_recovery={seq_recovery_per_state}, seq_recovery_per_chain={seq_recovery_per_chain}, model={args.model_name}\n{seq_split}\n"
                                         )
 
                                     if args.af2_formatted_output:

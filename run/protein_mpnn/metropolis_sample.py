@@ -1,8 +1,9 @@
-import numpy as np
-import torch
-import time
 import csv
 import os
+import time
+
+import numpy as np
+import torch
 
 
 def BPs_to_AAs(fwd_sequence, rev_sequence, num_codons, shift):
@@ -171,7 +172,7 @@ def score(seq1, seq2, probs1, probs2, fwd_idx, rev_idx, score_array1, score_arra
         print(f"[DEBUG] rev_idx={rev_idx}, rev_codon={seq2[rev_idx*3:rev_idx*3+3]}, sa2={sa2[rev_idx]}")
 
     return sa1, sa2
-    
+
 
 # Define Dictionary of Amino Acids
 codon_to_amino_acid = {
@@ -255,10 +256,10 @@ def na_sample(probs1, probs2):
         score_function = score
 
     # Fill in penalty for stop codon using "X" position in prob arrays
-    stop_penalty = 10000 # should be as large as possible 
+    stop_penalty = 10000 # should be as large as possible
 
     # The number of codons in the pair of proteins
-    num_codons = probs1.shape[0] 
+    num_codons = probs1.shape[0]
     num_nas = num_codons * 3 + shift + overhang_residues * 3 # +1 for single frame shift, +2 for double frame shift, +3 per overhang base
 
     temp_list = []
@@ -278,7 +279,7 @@ def na_sample(probs1, probs2):
     for BP in fwd_sequence[::-1]:
         rev_sequence += nucleic_acid_complement[BP]
     '''
-    
+
     # Create an all A DNA sequence for testing
     fwd_sequence = 'A' * num_nas
     rev_sequence = 'T' * num_nas
@@ -311,14 +312,14 @@ def na_sample(probs1, probs2):
             scores1 = torch.tensor([torch.sum(arr) for arr in score_arrays1])
             scores2 = torch.tensor([torch.sum(arr) for arr in score_arrays2])
             combined_scores = scores1 * scores2
-            
+
             # Get the indices of the minimum values. After 1000 iterations, disallow accepting the same sequence
             if i > 1000:
                 combined_scores[base_set.index(char)] = torch.tensor(float('inf'))
 
             min_indices = torch.nonzero(combined_scores == combined_scores.min()).squeeze()
 
-            # If there are multiple indices with the same minimum value, randomly choose one. 
+            # If there are multiple indices with the same minimum value, randomly choose one.
             if min_indices.dim() > 0:  # If there are multiple indices
                 random_min = min_indices[torch.randint(0, len(min_indices), (1,))]
             else:  # If there's only one index
@@ -332,7 +333,7 @@ def na_sample(probs1, probs2):
                     score_overall = new_score
                     score_array1, score_array2 = score_arrays1[random_min], score_arrays2[random_min]
                     best_iter = i
-            
+
             # If new score is worse we randomly sample a number and use the Metropolis Algorithm to determine if we should accept the new sequence
             elif metropolis:
                     metro_rand = np.random.rand()
@@ -408,7 +409,7 @@ def load_flags(file_path):
     """
     args = {}
     try:
-        with open(file_path, "r") as file:
+        with open(file_path) as file:
             for line in file:
                 # Skip empty lines and comments
                 line = line.strip()
@@ -442,24 +443,24 @@ def append_to_csv(file_path, data):
     data (list of lists): Data to append (each sublist is a row).
     """
     file_exists = os.path.exists(file_path)
-    
+
     with open(file_path, mode='a', newline='') as file:
         writer = csv.writer(file)
-        
+
         if not file_exists:
             header = [
-                'Final Score 1', 
-                'Final Score 2', 
+                'Final Score 1',
+                'Final Score 2',
                 'Best Iteration',
-                'Metropolis Used', 
-                'Runtime', 
-                'Final AAs 1', 
-                'Final AAs 2', 
-                'Fwd Sequence', 
+                'Metropolis Used',
+                'Runtime',
+                'Final AAs 1',
+                'Final AAs 2',
+                'Fwd Sequence',
                 'Rev Sequence',
             ]
             writer.writerow(header)  # Write headers if file does not exist
-        
+
         writer.writerow(data)
 
 def run_metropolis_from_flags(flags_file):
@@ -482,4 +483,4 @@ def run_metropolis_from_flags(flags_file):
 
     print('Using Updated Version of Metropolis Sampler')
     print(f"Running metropolis with strand={strand}, shift={shift}, temperature={temperature}, use_gradient={use_gradient}, gradient_start={gradient_start}, gradient_end={gradient_end}, num_mutations={num_mutations}, metropolis={metropolis}")
-    return(strand, shift, temperature, use_gradient, gradient_start, gradient_end, num_mutations, metropolis, overhang_residues)    
+    return(strand, shift, temperature, use_gradient, gradient_start, gradient_end, num_mutations, metropolis, overhang_residues)

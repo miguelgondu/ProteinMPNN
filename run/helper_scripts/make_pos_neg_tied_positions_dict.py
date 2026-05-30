@@ -1,13 +1,10 @@
 import argparse
-import glob
-import random
-import numpy as np
-import json
-import itertools
+
 from helper_scripts.make_tied_positions_dict import get_json_list, write_json
 
+
 def main(json_list, homooligomer, position_list, chain_list, pos_neg_chain_list, pos_neg_chain_betas):
-    
+
     homooligomeric_state = homooligomer
     if homooligomeric_state == 0:
         # NOTE: this is used for multi-state design workflow
@@ -32,7 +29,7 @@ def main(json_list, homooligomer, position_list, chain_list, pos_neg_chain_list,
                         final_pos = tied_list[chidx + j][i]  # fixed bug in bidirectional coding failing to work in opposite direction
                         if pos_neg_chain_list and chain in chain_list_flat:
                             temp_dict[chain] = [[final_pos], [chain_betas_dict[chain]]]  # need to use correct chain positions b/c chains can be different lengths
-                        else: 
+                        else:
                             temp_dict[chain] = [[final_pos], [1.0]] #first list is for residue numbers, second list is for weights for the energy, +ive and -ive design
                     tied_positions_list.append(temp_dict)
                 chidx += len(chains)
@@ -55,7 +52,7 @@ def main(json_list, homooligomer, position_list, chain_list, pos_neg_chain_list,
                     for j, chain in enumerate(chains):
                         if pos_neg_chain_list and chain in chain_list_flat:
                             temp_dict[chain] = [[i], [chain_betas_dict[chain]]]
-                        else: 
+                        else:
                             temp_dict[chain] = [[i], [1.0]] #first list is for residue numbers, second list is for weights for the energy, +ive and -ive design
                     tied_positions_list.append(temp_dict)
             my_dict[result['name']] = tied_positions_list
@@ -74,7 +71,7 @@ if __name__ == "__main__":
 
     args = argparser.parse_args()
     json_list = get_json_list(args.input_path)
-    my_dict = main(json_list, args.homooligomer, args.position_list, args.chain_list, 
+    my_dict = main(json_list, args.homooligomer, args.position_list, args.chain_list,
                    args.pos_neg_chain_list, args.pos_neg_chain_betas)
     write_json(args.output_path, my_dict)
 
