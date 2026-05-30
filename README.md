@@ -1,4 +1,30 @@
-# ProteinMPNN
+# `proteinmpnn` - A `cli` adaptation of Kuhlman lab's fork
+
+> [!WARNING]
+> This is a work-in-progress.
+
+This repo contains a clean-up of Kuhlman lab's fork of `ProteinMPNN`, converting
+it into an easy-to-use `cli`.
+
+This modernization includes
+- using `uv` for dependency and package management.
+- using `typer` to construct a CLI with plenty of flavor.
+
+Clone this repo and run
+```
+uv run proteinmpnn --help
+```
+
+## Current features
+- **Running inference for a single `pdb`** using `proteinmpnn run-single`. Use `--help` to get a look into the optional arguments. This is meant to replace the single-protein analyses.
+- **Computing conditional/unconditional probabilities** of amino-acids per location. Check `proteinmpnn compute-probs --help` for more context.
+
+## Other improvements on Kuhlman's fork
+- The usual two-step sequence with `generate_json.py` and then running it is no longer necessary.
+- **Unit testing** using `pytest`, as well as backwards compatibility test (making sure that we don't deviate from the original behavior).
+- **Linting** using `ruff` to make the code more developer-friendly.
+
+# Original readme
 
 This repo includes the Kuhlman Lab fork of ProteinMPNN. It includes all the functionality of the original ProteinMPNN repo (linked [here](https://github.com/dauparas/ProteinMPNN)), with the following additions:
 - Improved input parsing for custom design runs
