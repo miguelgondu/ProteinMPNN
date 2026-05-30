@@ -97,7 +97,9 @@ class TestInferenceMatchesOldOutput:
     def test_native_metadata_matches(self, old_output: dict, new_output: dict) -> None:
         """Native metadata (name, chains, model) must match."""
         assert old_output["native"]["name"] == new_output["native"]["name"]
-        assert old_output["native"]["fixed_chains"] == new_output["native"]["fixed_chains"]
+        assert (
+            old_output["native"]["fixed_chains"] == new_output["native"]["fixed_chains"]
+        )
         assert (
             old_output["native"]["designed_chains"]
             == new_output["native"]["designed_chains"]
@@ -348,6 +350,5 @@ class TestSymmetricDesignBackwardCompat:
                 # The designed regions (positions 7-15, 0-indexed: 6-14)
                 # should match between chains
                 assert chain_a[6:15] == chain_b[6:15], (
-                    f"Symmetric regions don't match: "
-                    f"{chain_a[6:15]} != {chain_b[6:15]}"
+                    f"Symmetric regions don't match: {chain_a[6:15]} != {chain_b[6:15]}"
                 )

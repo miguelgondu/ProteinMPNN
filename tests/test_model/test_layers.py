@@ -231,7 +231,6 @@ class TestProteinFeatures:
     def test_augmentation(self) -> None:
         """Test that augmentation adds noise when eps > 0."""
         torch.manual_seed(42)
-        layer_no_aug = ProteinFeatures(32, 32, augment_eps=0.0)
         layer_aug = ProteinFeatures(32, 32, augment_eps=0.1)
 
         X = torch.randn(1, 5, 4, 3)
@@ -272,10 +271,13 @@ class TestProteinFeatures:
         mask = torch.ones(1, 20)
         residue_idx = torch.arange(20).unsqueeze(0)
         # Two chains: first 10 residues chain 1, next 10 chain 2
-        chain_labels = torch.cat([
-            torch.ones(1, 10, dtype=torch.long),
-            torch.ones(1, 10, dtype=torch.long) * 2,
-        ], dim=1)
+        chain_labels = torch.cat(
+            [
+                torch.ones(1, 10, dtype=torch.long),
+                torch.ones(1, 10, dtype=torch.long) * 2,
+            ],
+            dim=1,
+        )
 
         E, E_idx = layer(X, mask, residue_idx, chain_labels)
 

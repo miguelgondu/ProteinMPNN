@@ -134,7 +134,7 @@ class TestDesignResult:
             # Split at # to get comment part
             parts = line.split("#")
             if len(parts) > 1:
-                comment = parts[1]
+                _ = parts[1]
                 # Comment should not have commas (they break AF2 parsing)
                 # Note: lists like fixed_chains get sanitized
                 pass  # This is tested by the format itself working

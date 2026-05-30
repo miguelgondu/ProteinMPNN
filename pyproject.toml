@@ -28,6 +28,9 @@ dev = [
 requires = ["uv_build>=0.9.26,<0.10.0"]
 build-backend = "uv_build"
 
+[tool.ruff]
+exclude = ["run", "examples", "setup", "data"]
+
 [tool.ruff.lint]
 extend-select = [
     "F",        # Pyflakes rules
