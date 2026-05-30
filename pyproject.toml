@@ -1,0 +1,47 @@
+[project]
+name = "proteinmpnn"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+authors = [
+    { name = "Miguel González Duque", email = "miguelgondu@gmail.com" }
+]
+requires-python = ">=3.13"
+dependencies = [
+    "biopython>=1.87",
+    "pydantic>=2.0",
+    "torch>=2.12.0",
+]
+
+[project.scripts]
+proteinmpnn = "proteinmpnn:main"
+
+[dependency-groups]
+dev = [
+    "pytest>=8.0",
+    "ruff>=0.11",
+]
+
+[build-system]
+requires = ["uv_build>=0.9.26,<0.10.0"]
+build-backend = "uv_build"
+
+[tool.ruff.lint]
+extend-select = [
+    "F",        # Pyflakes rules
+    "W",        # PyCodeStyle warnings
+    "E",        # PyCodeStyle errors
+    "I",        # Sort imports properly
+    "UP",       # Warn if certain things can changed due to newer Python versions
+    "C4",       # Catch incorrect use of comprehensions, dict, list, etc
+    "FA",       # Enforce from __future__ import annotations
+    "ISC",      # Good use of string concatenation
+    "ICN",      # Use common import conventions
+    "RET",      # Good return practices
+    "SIM",      # Common simplification rules
+    "TID",      # Some good import practices
+    "TC",       # Enforce importing certain types in a TYPE_CHECKING block
+    "PTH",      # Use pathlib instead of os.path
+    "TD",       # Be diligent with TODO comments
+    "NPY",      # Some numpy-specific things
+]
