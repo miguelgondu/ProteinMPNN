@@ -9,8 +9,10 @@ authors = [
 requires-python = ">=3.13"
 dependencies = [
     "biopython>=1.87",
+    "numpy>=2.4.6",
     "pydantic>=2.13.4",
     "torch>=2.12.0",
+    "typer>=0.26.3",
 ]
 
 [project.scripts]
@@ -42,6 +44,5 @@ extend-select = [
     "TID",      # Some good import practices
     "TC",       # Enforce importing certain types in a TYPE_CHECKING block
     "PTH",      # Use pathlib instead of os.path
-    "TD",       # Be diligent with TODO comments
     "NPY",      # Some numpy-specific things
 ]
