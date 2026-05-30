@@ -1,0 +1,116 @@
+{
+  "sequence": {
+    "A": "GWSTELEKHREELKEFLKKEGITNVEIRIDNGRLEVRVEGGTERLKRFLEELRQKLEKKGYTVDIKIEXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXXX"
+  },
+  "designable": [
+    {
+      "chain": "A",
+      "resid": 1,
+      "WTAA": "G",
+      "MutTo": "all"
+    },
+    {
+      "chain": "A",
+      "resid": 2,
+      "WTAA": "W",
+      "MutTo": "all"
+    },
+    {
+      "chain": "A",
+      "resid": 3,
+      "WTAA": "S",
+      "MutTo": "all"
+    },
+    {
+      "chain": "A",
+      "resid": 4,
+      "WTAA": "T",
+      "MutTo": "all"
+    },
+    {
+      "chain": "A",
+      "resid": 29,
+      "WTAA": "I",
+      "MutTo": "all"
+    },
+    {
+      "chain": "A",
+      "resid": 30,
+      "WTAA": "D",
+      "MutTo": "all"
+    },
+    {
+      "chain": "A",
+      "resid": 31,
+      "WTAA": "N",
+      "MutTo": "all"
+    },
+    {
+      "chain": "A",
+      "resid": 32,
+      "WTAA": "G",
+      "MutTo": "all"
+    },
+    {
+      "chain": "A",
+      "resid": 40,
+      "WTAA": "G",
+      "MutTo": "all"
+    },
+    {
+      "chain": "A",
+      "resid": 41,
+      "WTAA": "G",
+      "MutTo": "all"
+    },
+    {
+      "chain": "A",
+      "resid": 42,
+      "WTAA": "T",
+      "MutTo": "all"
+    },
+    {
+      "chain": "A",
+      "resid": 43,
+      "WTAA": "E",
+      "MutTo": "all"
+    },
+    {
+      "chain": "A",
+      "resid": 44,
+      "WTAA": "R",
+      "MutTo": "all"
+    },
+    {
+      "chain": "A",
+      "resid": 45,
+      "WTAA": "L",
+      "MutTo": "all"
+    },
+    {
+      "chain": "A",
+      "resid": 46,
+      "WTAA": "K",
+      "MutTo": "all"
+    },
+    {
+      "chain": "A",
+      "resid": 47,
+      "WTAA": "R",
+      "MutTo": "all"
+    },
+    {
+      "chain": "A",
+      "resid": 48,
+      "WTAA": "F",
+      "MutTo": "all"
+    },
+    {
+      "chain": "A",
+      "resid": 49,
+      "WTAA": "L",
+      "MutTo": "all"
+    }
+  ],
+  "symmetric": []
+}
