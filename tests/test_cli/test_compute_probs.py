@@ -16,7 +16,7 @@ from typer.testing import CliRunner
 from proteinmpnn.cli import app
 from proteinmpnn.utils.constants import ROOT_DIR, WEIGHTS_PATH
 
-runner = CliRunner()
+runner = CliRunner(env={"COLUMNS": "200"})
 
 # Test data paths
 DATA_DIR = ROOT_DIR / "data" / "pdbs"

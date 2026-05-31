@@ -1,11 +1,11 @@
 {
-  "description": "Inference output for 6MRR A1-A68 with seed=42, verified against old run_protein_mpnn.py logic",
+  "description": "Inference output for 6MRR A1-A68 with seed=42, verified against old run_protein_mpnn.py logic. Generated on CPU for cross-platform reproducibility.",
   "seed": 42,
   "model_name": "v_48_020",
   "designable_res": "A1-A68",
   "native": {
     "name": "6MRR",
-    "score": 1.4924464225769043,
+    "score": 1.4854153394699097,
     "fixed_chains": [],
     "designed_chains": [
       "A"
@@ -17,23 +17,23 @@
     {
       "temperature": 0.1,
       "sample_index": 0,
-      "score": 1.0267943143844604,
-      "seq_recovery": 0.529411792755127,
-      "sequence": "GTDEELEKVVKELKAFLKKKGITNVKIKVENGTLTITMNGASEETKNFLENLKKELEAKGYKVNITIK"
+      "score": 0.9701802730560303,
+      "seq_recovery": 0.5441176295280457,
+      "sequence": "GIDPELEKEVKKLKKFLKEKGITNVEIKIEDGELTIVTKGASEELKKFLEELKKELEAKGYKVNIEIK"
     },
     {
       "temperature": 0.1,
       "sample_index": 0,
-      "score": 0.9342713952064514,
-      "seq_recovery": 0.529411792755127,
-      "sequence": "GMDEELEKYVEELKKFLKEKGITNVKIEVKDGVLTITMNGADEETKKFLEELKKELEKKGYKVNVEIK"
+      "score": 0.9000697135925293,
+      "seq_recovery": 0.5588235259056091,
+      "sequence": "GVDEELEKYVEELKKFLKEKGINNVEIKIENGKLTIKMKGASEEVKKKLEELKKELEEKGYEVNIEIE"
     },
     {
       "temperature": 0.1,
       "sample_index": 0,
-      "score": 0.9591245055198669,
-      "seq_recovery": 0.529411792755127,
-      "sequence": "GMDEELEKYVEELKAFLEKEGIDNVKIKVEDGVLTIEMKGASEETKKFLEELKKELEAKGYKVEVKIY"
+      "score": 0.9501403570175171,
+      "seq_recovery": 0.5441176295280457,
+      "sequence": "GMDEELEKYVEKLNEFLKKKGVTNVEIKVEDGELTIKMKGASEEVKKFLEELKKELEAKGYTVNVTIE"
     }
   ]
 }

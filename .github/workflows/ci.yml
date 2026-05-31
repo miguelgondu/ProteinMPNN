@@ -45,7 +45,7 @@ jobs:
         run: uv sync --all-groups
 
       - name: Run tests
-        run: uv run pytest
+        run: uv run pytest -vv
 
   build:
     runs-on: ubuntu-latest

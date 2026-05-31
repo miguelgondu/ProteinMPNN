@@ -48,11 +48,16 @@ class TestInferenceMatchesOldOutput:
     @pytest.fixture
     def new_output(self) -> dict:
         """Generate output using new InferenceRunner."""
+        import torch
+
         pdb_path = DATA_DIR / "6MRR.pdb"
         if not pdb_path.exists():
             pytest.skip(f"PDB not found: {pdb_path}")
 
-        runner = InferenceRunner(model_name="v_48_020")
+        # Force CPU to ensure cross-platform reproducibility
+        # (torch.randn produces different values on
+        # different devices even with same seed)
+        runner = InferenceRunner(model_name="v_48_020", device=torch.device("cpu"))
         result = runner.design_single(
             pdb_path=pdb_path,
             designable_res="A1-A68",
