@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import copy
 from pathlib import Path
-from typing import TYPE_CHECKING, Literal
+from typing import TYPE_CHECKING
 
 import numpy as np
 import torch
@@ -25,28 +25,14 @@ from proteinmpnn.model.proteinmpnn import (
     ProteinMPNN,
 )
 from proteinmpnn.model.utils import _S_to_seq
-from proteinmpnn.utils.constants import HIDDEN_DIM, NUM_LAYERS, WEIGHTS_PATH
+from proteinmpnn.utils.constants import HIDDEN_DIM, NUM_LAYERS
 from proteinmpnn.utils.logging import get_logger
+from proteinmpnn.utils.weights import ModelName, ensure_weights
 
 if TYPE_CHECKING:
     from proteinmpnn.data.config import SingleStateConfig
 
 logger = get_logger("inference.runner")
-
-# Type alias for model names
-ModelName = Literal[
-    "v_48_002",
-    "v_48_010",
-    "v_48_020",
-    "v_48_030",
-    "ca_48_002",
-    "ca_48_010",
-    "ca_48_020",
-    "s_48_002",
-    "s_48_010",
-    "s_48_020",
-    "s_48_030",
-]
 
 
 class InferenceRunner:
@@ -97,12 +83,8 @@ class InferenceRunner:
 
     def _load_model(self) -> ProteinMPNN:
         """Load the ProteinMPNN model from checkpoint."""
-        ckpt_path = WEIGHTS_PATH / f"{self.model_name}.pt"
-        if not ckpt_path.exists():
-            raise ValueError(
-                f"Model weights not found at {ckpt_path}. "
-                f"Please ensure the model weights are downloaded."
-            )
+        # Get weights path, downloading if necessary
+        ckpt_path = ensure_weights(self.model_name)
 
         logger.debug("Loading checkpoint from %s", ckpt_path)
         ckpt = torch.load(ckpt_path, map_location=self.device, weights_only=False)

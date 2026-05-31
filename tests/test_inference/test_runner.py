@@ -33,7 +33,7 @@ class TestInferenceRunner:
 
     def test_invalid_model_name_raises(self):
         """Test that an invalid model name raises ValueError."""
-        with pytest.raises(ValueError, match="Model weights not found"):
+        with pytest.raises(ValueError, match="Unknown model"):
             InferenceRunner(model_name="nonexistent_model")
 
 

@@ -1,0 +1,106 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Set up Python
+        run: uv python install 3.13
+
+      - name: Install dependencies
+        run: uv sync --all-groups
+
+      - name: Get version from tag
+        id: tag_version
+        run: echo "VERSION=${GITHUB_REF#refs/tags/v}" >> $GITHUB_OUTPUT
+
+      - name: Get version from pyproject.toml
+        id: pyproject_version
+        run: |
+          VERSION=$(grep -m1 'version = ' pyproject.toml | cut -d'"' -f2)
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Verify versions match
+        run: |
+          if [ "${{ steps.tag_version.outputs.VERSION }}" != "${{ steps.pyproject_version.outputs.VERSION }}" ]; then
+            echo "ERROR: Tag version (${{ steps.tag_version.outputs.VERSION }}) does not match pyproject.toml version (${{ steps.pyproject_version.outputs.VERSION }})"
+            exit 1
+          fi
+          echo "✓ Versions match: ${{ steps.tag_version.outputs.VERSION }}"
+
+      - name: Run linter
+        run: uv run ruff check
+
+      - name: Run type checker
+        run: uv run pyright
+
+      - name: Run tests
+        run: uv run pytest
+
+  publish:
+    runs-on: ubuntu-latest
+    needs: verify
+    environment: release
+    permissions:
+      id-token: write
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install uv
+        uses: astral-sh/setup-uv@v4
+
+      - name: Set up Python
+        run: uv python install 3.13
+
+      - name: Build package
+        run: uv build
+
+      - name: Publish to PyPI
+        run: uv publish
+        env:
+          UV_PUBLISH_TOKEN: ${{ secrets.PYPI_API_TOKEN }}
+
+      - name: Extract changelog for release
+        id: changelog
+        run: |
+          # Extract the changelog section for this version
+          VERSION=${GITHUB_REF#refs/tags/v}
+          # Get content between this version header and the next version header (or end of file)
+          CHANGELOG=$(awk "/^## \[$VERSION\]/{flag=1; next} /^## \[/{flag=0} flag" CHANGELOG.md)
+          # Handle multi-line output for GitHub Actions
+          echo "CHANGELOG<<EOF" >> $GITHUB_OUTPUT
+          echo "$CHANGELOG" >> $GITHUB_OUTPUT
+          echo "EOF" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          body: |
+            ## What's Changed
+
+            ${{ steps.changelog.outputs.CHANGELOG }}
+
+            ## Installation
+
+            ```bash
+            pip install proteinmpnn-cli
+            ```
+
+            ## Verification
+
+            ```bash
+            proteinmpnn --help
+            ```
+          files: dist/*
+          generate_release_notes: true
