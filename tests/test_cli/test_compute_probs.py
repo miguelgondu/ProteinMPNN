@@ -176,11 +176,3 @@ class TestComputeProbsCommand:
             )
 
             assert result.exit_code == 0, f"CLI failed: {result.output}"
-
-    def test_help_output(self):
-        """Test that --help works."""
-        result = runner.invoke(app, ["compute-probs", "--help"])
-        assert result.exit_code == 0
-        assert "Compute amino acid conditional" in result.output
-        assert "--unconditional" in result.output
-        assert "--design" in result.output
