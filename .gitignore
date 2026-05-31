@@ -132,3 +132,6 @@ dmypy.json
 
 data/pdbs/*.csv
 data/pdbs/*.npz
+
+# macos
+.DS_Store
