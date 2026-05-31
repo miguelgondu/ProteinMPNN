@@ -440,18 +440,220 @@ def generate_inference_fixture(
     return result
 
 
+def generate_probs_fixture(
+    pdb_path: Path,
+    model_name: str = "v_48_020",
+    designable_res: str = "",
+    unconditional: bool = False,
+    seed: int = 42,
+) -> dict:
+    """Generate probability output using the original ProteinMPNN code.
+
+    Args:
+        pdb_path: Path to the PDB file
+        model_name: Name of the model to use
+        designable_res: Designable residue specification (empty = all residues)
+        unconditional: If True, compute unconditional probs; otherwise conditional
+        seed: Random seed for reproducibility
+
+    Returns:
+        Dictionary containing probability results and metadata
+    """
+    # Force CPU for cross-platform reproducibility
+    device = torch.device("cpu")
+
+    # Model hyperparameters
+    hidden_dim = MODEL_CONFIG["hidden_dim"]
+    num_layers = MODEL_CONFIG["num_layers"]
+
+    # Load model weights
+    model_weight_dir = determine_weight_directory()
+    ckpt_path = os.path.join(model_weight_dir, f"{model_name}.pt")
+    if not os.path.isfile(ckpt_path):
+        raise ValueError(f"Model weights not found: {ckpt_path}")
+
+    ckpt = torch.load(ckpt_path, map_location=device)
+    num_edges = ckpt["num_edges"]
+
+    # Build model
+    model = ProteinMPNN(
+        num_letters=21,
+        node_features=hidden_dim,
+        edge_features=hidden_dim,
+        hidden_dim=hidden_dim,
+        num_encoder_layers=num_layers,
+        num_decoder_layers=num_layers,
+        augment_eps=0.0,
+        k_neighbors=num_edges,
+    )
+    model.to(device)
+    model.load_state_dict(ckpt["model_state_dict"])
+    model.eval()
+
+    # Parse the PDB
+    pdb_dir = pdb_path.parent
+    pdb_name = pdb_path.stem
+    pdb_ds = get_pdb_dataset(str(pdb_dir))
+
+    # Find the correct protein
+    protein = None
+    for p in pdb_ds:
+        if p["name"] == pdb_name:
+            protein = p
+            break
+    if protein is None:
+        protein = pdb_ds[0]
+
+    # Extract chain sequences
+    chain_sequences = {}
+    for key in protein:
+        if key.startswith("seq_chain_"):
+            chain_id = key[-1]
+            chain_sequences[chain_id] = protein[key]
+
+    # Build design specs dict
+    if designable_res:
+        designable_list = parse_designable_res(designable_res, chain_sequences)
+    else:
+        # All residues designable
+        designable_list = []
+        for chain_id, seq in chain_sequences.items():
+            for i, aa in enumerate(seq):
+                designable_list.append({
+                    "chain": chain_id,
+                    "resid": i + 1,
+                    "WTAA": aa,
+                    "MutTo": "all",
+                })
+
+    design_specs_dict = {
+        "sequence": chain_sequences,
+        "designable": designable_list,
+        "symmetric": [],
+    }
+
+    batch_clones = [copy.deepcopy(protein)]
+
+    # Transform inputs
+    (
+        chain_id_dict,
+        fixed_positions_dict,
+        pssm_dict,
+        omit_AA_dict,
+        _,
+        tied_positions_dict,
+        bias_by_res_dict,
+    ) = transform_inputs(design_specs_dict, protein, experimental=False)
+
+    # Featurize
+    (
+        X,
+        S,
+        mask,
+        _,
+        chain_M,
+        chain_encoding_all,
+        letter_list_list,
+        _,
+        _,
+        _,
+        chain_M_pos,
+        _,
+        residue_idx,
+        _,
+        _,
+        _,
+        _,
+        _,
+        _,
+        _,
+    ) = tied_featurize(
+        batch_clones,
+        device,
+        chain_id_dict,
+        fixed_positions_dict,
+        omit_AA_dict,
+        tied_positions_dict,
+        pssm_dict,
+        bias_by_res_dict,
+    )
+
+    # Reset seed right before generating random tensor
+    torch.manual_seed(seed)
+
+    # Compute probabilities
+    with torch.no_grad():
+        if unconditional:
+            log_probs = model.unconditional_probs(
+                X,
+                mask,
+                residue_idx,
+                chain_encoding_all,
+            )
+        else:
+            randn = torch.randn(chain_M.shape, device=device)
+            log_probs = model.conditional_probs(
+                X,
+                S,
+                mask,
+                chain_M * chain_M_pos,
+                residue_idx,
+                chain_encoding_all,
+                randn,
+            )
+
+    # Extract results
+    log_probs_np = log_probs[0].cpu().numpy()  # [L_padded, 21]
+    mask_np = mask[0].cpu().numpy()
+
+    # Get only valid (non-padded) positions
+    valid_indices = mask_np > 0
+    log_probs_valid = log_probs_np[valid_indices]
+
+    # Build residue info
+    chain_letters = letter_list_list[0]
+    residue_info = []
+    pos_in_protein = 0
+    for chain_letter in chain_letters:
+        chain_seq = protein[f"seq_chain_{chain_letter}"]
+        chain_length = len(chain_seq)
+        for res_idx in range(chain_length):
+            if pos_in_protein < len(log_probs_valid):
+                residue_info.append({
+                    "chain": chain_letter,
+                    "residue_idx": res_idx + 1,
+                })
+            pos_in_protein += 1
+
+    mode = "unconditional" if unconditional else "conditional"
+
+    return {
+        "description": f"{mode.capitalize()} probs for {pdb_name} "
+                       f"with seed={seed}, generated by ORIGINAL code. CPU-only.",
+        "seed": seed,
+        "model_name": model_name,
+        "designable_res": designable_res,
+        "mode": mode,
+        "log_probs": log_probs_valid,
+        "residue_info": residue_info,
+        "num_residues": len(residue_info),
+    }
+
+
 def main():
     # Path setup
     fixtures_dir = ROOT_DIR / "tests" / "fixtures"
     data_dir = ROOT_DIR / "data" / "pdbs"
-
-    # Generate 6MRR inference fixture
-    print("Generating 6MRR inference fixture using original code...")
     pdb_path = data_dir / "6MRR.pdb"
 
     if not pdb_path.exists():
         print(f"ERROR: PDB file not found: {pdb_path}")
         sys.exit(1)
+
+    # Generate 6MRR inference fixture
+    print("=" * 60)
+    print("Generating 6MRR inference fixture using original code...")
+    print("=" * 60)
 
     result = generate_inference_fixture(
         pdb_path=pdb_path,
@@ -462,15 +664,11 @@ def main():
         seed=42,
     )
 
-    # Save as the "original" fixture
     output_path = fixtures_dir / "6MRR_inference_original.json"
     with output_path.open("w") as f:
         json.dump(result, f, indent=2)
 
     print(f"Saved fixture to: {output_path}")
-
-    # Print summary
-    print("\nFixture summary:")
     print(f"  Native sequence: {result['native']['sequence']}")
     print(f"  Native score: {result['native']['score']:.6f}")
     print(f"  Designed chains: {result['native']['designed_chains']}")
@@ -479,6 +677,103 @@ def main():
             f"  Sequence {i + 1}: score={seq['score']:.6f}, "
             f"recovery={seq['seq_recovery']:.4f}"
         )
+
+    # Generate unconditional probs fixture
+    print()
+    print("=" * 60)
+    print("Generating unconditional probs fixture using original code...")
+    print("=" * 60)
+
+    probs_result = generate_probs_fixture(
+        pdb_path=pdb_path,
+        model_name="v_48_020",
+        designable_res="",  # All residues
+        unconditional=True,
+        seed=42,
+    )
+
+    # Save as npz for the array, json for metadata
+    npz_path = fixtures_dir / "6MRR_unconditional_probs_original.npz"
+    np.savez(
+        npz_path,
+        log_probs=probs_result["log_probs"],
+    )
+    json_path = fixtures_dir / "6MRR_unconditional_probs_original.json"
+    metadata = {k: v for k, v in probs_result.items() if k != "log_probs"}
+    with json_path.open("w") as f:
+        json.dump(metadata, f, indent=2)
+
+    print(f"Saved fixture to: {npz_path}")
+    print(f"Saved metadata to: {json_path}")
+    print(f"  Mode: {probs_result['mode']}")
+    print(f"  Num residues: {probs_result['num_residues']}")
+    print(f"  Log probs shape: {probs_result['log_probs'].shape}")
+
+    # Generate conditional probs fixture (all residues designable)
+    print()
+    print("=" * 60)
+    print("Generating conditional probs fixture (all residues)...")
+    print("=" * 60)
+
+    probs_result = generate_probs_fixture(
+        pdb_path=pdb_path,
+        model_name="v_48_020",
+        designable_res="",  # All residues
+        unconditional=False,
+        seed=42,
+    )
+
+    npz_path = fixtures_dir / "6MRR_conditional_probs_all_original.npz"
+    np.savez(
+        npz_path,
+        log_probs=probs_result["log_probs"],
+    )
+    json_path = fixtures_dir / "6MRR_conditional_probs_all_original.json"
+    metadata = {k: v for k, v in probs_result.items() if k != "log_probs"}
+    with json_path.open("w") as f:
+        json.dump(metadata, f, indent=2)
+
+    print(f"Saved fixture to: {npz_path}")
+    print(f"Saved metadata to: {json_path}")
+    print(f"  Mode: {probs_result['mode']}")
+    print(f"  Num residues: {probs_result['num_residues']}")
+    print(f"  Log probs shape: {probs_result['log_probs'].shape}")
+
+    # Generate conditional probs fixture (partial designable)
+    print()
+    print("=" * 60)
+    print("Generating conditional probs fixture (A1-A30 designable)...")
+    print("=" * 60)
+
+    probs_result = generate_probs_fixture(
+        pdb_path=pdb_path,
+        model_name="v_48_020",
+        designable_res="A1-A30",
+        unconditional=False,
+        seed=42,
+    )
+
+    npz_path = fixtures_dir / "6MRR_conditional_probs_A1-A30_original.npz"
+    np.savez(
+        npz_path,
+        log_probs=probs_result["log_probs"],
+    )
+    json_path = fixtures_dir / "6MRR_conditional_probs_A1-A30_original.json"
+    metadata = {k: v for k, v in probs_result.items() if k != "log_probs"}
+    with json_path.open("w") as f:
+        json.dump(metadata, f, indent=2)
+
+    print(f"Saved fixture to: {npz_path}")
+    print(f"Saved metadata to: {json_path}")
+    print(f"  Mode: {probs_result['mode']}")
+    print(f"  Designable res: {probs_result['designable_res']}")
+    print(f"  Num residues: {probs_result['num_residues']}")
+    print(f"  Log probs shape: {probs_result['log_probs'].shape}")
+
+    print()
+    print("=" * 60)
+    print("All fixtures generated successfully!")
+    print("=" * 60)
 
 
 if __name__ == "__main__":
