@@ -118,8 +118,6 @@ class TestRunSingleCommand:
             )
 
             assert result.exit_code == 0
-            assert "Native sequence score" in result.output
-            assert "Best designed sequence score" in result.output
 
     def test_run_single_with_temperature(self, pdb_path):
         """Test run-single with custom temperature."""

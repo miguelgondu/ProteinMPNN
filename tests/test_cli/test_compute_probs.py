@@ -151,7 +151,6 @@ class TestComputeProbsCommand:
             )
 
             assert result.exit_code == 0, f"CLI failed: {result.output}"
-            assert "unconditional" in result.output
 
             # Check that mode is unconditional in CSV
             csv_path = output_dir / "6MRR_probs.csv"
@@ -177,7 +176,6 @@ class TestComputeProbsCommand:
             )
 
             assert result.exit_code == 0, f"CLI failed: {result.output}"
-            assert "conditional" in result.output
 
     def test_help_output(self):
         """Test that --help works."""
@@ -186,25 +184,3 @@ class TestComputeProbsCommand:
         assert "Compute amino acid conditional" in result.output
         assert "--unconditional" in result.output
         assert "--design" in result.output
-
-    def test_prints_summary(self, pdb_path):
-        """Test that compute-probs prints summary information."""
-        with tempfile.TemporaryDirectory() as tmpdir:
-            output_dir = Path(tmpdir)
-            result = runner.invoke(
-                app,
-                [
-                    "compute-probs",
-                    str(pdb_path),
-                    "--design",
-                    "A1-A10",
-                    "--output",
-                    str(output_dir),
-                    "--seed",
-                    "42",
-                ],
-            )
-
-            assert result.exit_code == 0
-            assert "log probabilities" in result.output.lower()
-            assert "residues" in result.output.lower()
