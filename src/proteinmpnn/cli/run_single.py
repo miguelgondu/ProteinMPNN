@@ -8,6 +8,7 @@ from typing import Annotated, Literal
 import typer
 
 from proteinmpnn.cli import app
+from proteinmpnn.cli.display import display_design_results
 from proteinmpnn.cli.output import write_af2_csv, write_fasta
 from proteinmpnn.inference import InferenceRunner
 from proteinmpnn.utils.logging import get_logger
@@ -147,7 +148,5 @@ def run_single(
         write_af2_csv(result, csv_path)
         logger.info("Wrote AlphaFold2 CSV to %s", csv_path)
 
-    # Print summary
-    logger.info("Native sequence score: %.4f", result.native.score)
-    best_score = min(s.score for s in result.sequences)
-    logger.info("Best designed sequence score: %.4f", best_score)
+    # Display rich summary
+    display_design_results(result)

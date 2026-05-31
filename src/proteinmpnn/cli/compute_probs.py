@@ -8,6 +8,7 @@ from typing import Annotated, Literal
 import typer
 
 from proteinmpnn.cli import app
+from proteinmpnn.cli.display import display_probs_results
 from proteinmpnn.cli.output import write_probs_csv, write_probs_npz
 from proteinmpnn.inference import InferenceRunner
 from proteinmpnn.utils.logging import get_logger
@@ -102,10 +103,5 @@ def compute_probs(
     write_probs_npz(result, npz_path)
     logger.info("Wrote NPZ to %s", npz_path)
 
-    # Print summary
-    logger.info(
-        "Computed %s log probabilities for %d residues",
-        mode_str,
-        len(result.residue_info),
-    )
-    logger.info("Log probability matrix shape: %s", result.log_probs.shape)
+    # Display rich summary
+    display_probs_results(result)

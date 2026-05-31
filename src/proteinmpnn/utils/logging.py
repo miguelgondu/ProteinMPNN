@@ -6,6 +6,8 @@ import logging
 import sys
 from typing import TYPE_CHECKING
 
+from rich.logging import RichHandler
+
 if TYPE_CHECKING:
     from pathlib import Path
 
@@ -14,6 +16,7 @@ def setup_logging(
     level: int = logging.INFO,
     log_file: Path | str | None = None,
     log_format: str | None = None,
+    use_rich: bool = True,
 ) -> None:
     """Configure the root logger for the proteinmpnn package.
 
@@ -22,6 +25,7 @@ def setup_logging(
         log_file: Optional path to a file for logging output.
         log_format: Optional custom format string. If None, uses a default format
             with timestamp, level, logger name, and message.
+        use_rich: Whether to use rich for colorful console output.
     """
     if log_format is None:
         log_format = "%(asctime)s | %(levelname)-8s | %(name)s | %(message)s"
@@ -29,11 +33,20 @@ def setup_logging(
     handlers: list[logging.Handler] = []
 
     # Console handler with formatting
-    console_handler = logging.StreamHandler(sys.stderr)
-    console_handler.setLevel(level)
-    console_handler.setFormatter(
-        logging.Formatter(log_format, datefmt="%Y-%m-%d %H:%M:%S")
-    )
+    if use_rich:
+        console_handler = RichHandler(
+            level=level,
+            rich_tracebacks=True,
+            show_time=True,
+            show_path=False,
+            omit_repeated_times=False,
+        )
+    else:
+        console_handler = logging.StreamHandler(sys.stderr)
+        console_handler.setLevel(level)
+        console_handler.setFormatter(
+            logging.Formatter(log_format, datefmt="%Y-%m-%d %H:%M:%S")
+        )
     handlers.append(console_handler)
 
     # Optional file handler
