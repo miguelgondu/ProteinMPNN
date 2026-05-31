@@ -46,10 +46,12 @@ class TestGatherEdges:
     def test_batch_independence(self) -> None:
         """Test that batches are processed independently."""
         edges = torch.randn(2, 4, 4, 3)
-        neighbor_idx = torch.tensor([
-            [[0, 1], [1, 2], [2, 3], [0, 3]],
-            [[3, 2], [2, 1], [1, 0], [3, 0]],
-        ])
+        neighbor_idx = torch.tensor(
+            [
+                [[0, 1], [1, 2], [2, 3], [0, 3]],
+                [[3, 2], [2, 1], [1, 0], [3, 0]],
+            ]
+        )
 
         result = gather_edges(edges, neighbor_idx)
 
@@ -141,9 +143,7 @@ class TestCatNeighborsNodes:
 
         # First half should be h_neighbors (1.0), second half should be h_nodes (2.0)
         torch.testing.assert_close(result[:, :, :, :C], h_neighbors)
-        torch.testing.assert_close(
-            result[:, :, :, C:], torch.ones(B, N, K, C) * 2.0
-        )
+        torch.testing.assert_close(result[:, :, :, C:], torch.ones(B, N, K, C) * 2.0)
 
 
 class TestSToSeq:

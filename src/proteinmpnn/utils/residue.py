@@ -71,9 +71,7 @@ def parse_residue_range(range_item: str) -> list[tuple[str, int]]:
     if s_chain != f_chain:
         raise ValueError(f"Residue ranges cannot span multiple chains: {range_item}")
     if s_idx >= f_idx:
-        raise ValueError(
-            f"Residue range start must be smaller than end: {range_item}"
-        )
+        raise ValueError(f"Residue range start must be smaller than end: {range_item}")
 
     return [(s_chain, i) for i in range(s_idx, f_idx + 1)]
 
