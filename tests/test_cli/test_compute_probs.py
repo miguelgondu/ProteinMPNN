@@ -98,7 +98,8 @@ class TestComputeProbsCommand:
             headers = lines[1].split(",")
             assert headers[0] == "chain"
             assert headers[1] == "residue_idx"
-            assert len(headers) == 23  # chain, residue_idx + 21 amino acids
+            assert headers[2] == "observed"
+            assert len(headers) == 24  # chain, residue_idx, observed + 21 amino acids
 
     def test_npz_file_content(self, pdb_path):
         """Test that NPZ file has correct structure."""

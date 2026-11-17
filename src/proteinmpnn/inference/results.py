@@ -150,10 +150,25 @@ class ResidueInfo(BaseModel):
 class ConditionalProbsResult(BaseModel):
     """Result from conditional probability computation.
 
+    There is exactly one row per *parsed* residue, in parse order, including
+    residues the model could not use. ``observed`` says which rows the model
+    actually saw: a residue is unobserved when any of its N, CA, C, O coordinates
+    is missing, which happens both for the placeholder rows ``parse_PDB`` inserts
+    across gaps in author numbering and for real residues with an incomplete
+    backbone.
+
+    **Log probabilities on unobserved rows are meaningless** -- the model ran
+    with their coordinates zeroed -- so mask with ``observed`` before using them.
+    They are passed through rather than replaced by NaN, which matches upstream
+    ProteinMPNN's ``--conditional_probs_only`` output: it likewise emits every
+    row and ships the mask beside it.
+
     Attributes:
         protein_name: Name of the protein (from PDB file).
         model_name: Name of the ProteinMPNN model used.
         log_probs: Log probabilities array of shape [L, 21].
+        observed: Boolean array of shape [L]; False where the backbone was unusable.
+        native_seq: The parsed sequence, length L, with "X" on unobserved rows.
         residue_info: List of ResidueInfo for each position.
         mode: Whether the probabilities are conditional or unconditional.
     """
@@ -163,6 +178,8 @@ class ConditionalProbsResult(BaseModel):
     protein_name: str
     model_name: str
     log_probs: np.ndarray  # Shape [L, 21]
+    observed: np.ndarray  # Shape [L], bool
+    native_seq: str  # Length L
     residue_info: list[ResidueInfo]
     mode: Literal["conditional", "unconditional"]
 
@@ -179,13 +196,18 @@ class ConditionalProbsResult(BaseModel):
             f"# protein={self.protein_name}, model={self.model_name}, mode={self.mode}"
         )
 
-        # Column headers
-        header = ["chain", "residue_idx"] + list(ALPHABET)
+        # Column headers. `observed` is included because the log probabilities on
+        # unobserved rows are meaningless, and a CSV consumer has no other way to tell.
+        header = ["chain", "residue_idx", "observed"] + list(ALPHABET)
         lines.append(",".join(header))
 
         # Data rows
         for i, res_info in enumerate(self.residue_info):
-            row_values = [res_info.chain, str(res_info.residue_idx)]
+            row_values = [
+                res_info.chain,
+                str(res_info.residue_idx),
+                str(bool(self.observed[i])).lower(),
+            ]
             row_values.extend(f"{self.log_probs[i, j]:.6f}" for j in range(21))
             lines.append(",".join(row_values))
 
@@ -205,6 +227,8 @@ class ConditionalProbsResult(BaseModel):
 
         return {
             "log_probs": self.log_probs,
+            "observed": self.observed,
+            "native_seq": self.native_seq,
             "residue_info": residue_info_arr,
             "alphabet": ALPHABET,
             "metadata": {

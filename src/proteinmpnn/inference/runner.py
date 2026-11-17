@@ -379,43 +379,52 @@ class InferenceRunner:
                     randn,
                 )
 
-        # Extract log probs as numpy array [L, 21]
-        # Remove batch dimension and get valid positions only
+        # The native sequence as parsed, which is what defines the row space below.
+        # parse_PDB writes "-" for the placeholder rows it inserts across gaps in author
+        # numbering; featurize reads those as "X", so report them that way.
+        chain_letters = letter_list_list[0]
+        native_seq = "".join(
+            protein[f"seq_chain_{chain_letter}"] for chain_letter in chain_letters
+        ).replace("-", "X")
+        n_parsed = len(native_seq)
+
+        # Extract log probs as numpy array, one row per parsed residue.
+        #
+        # `mask` conflates two things: batch padding, and residues whose backbone
+        # is incomplete (featurize sets mask=0 when any of N, CA, C, O is
+        # missing). We batch a single protein, so there is no padding and the
+        # first L_parse rows are exactly the parsed residues. Selecting
+        # `mask > 0` here would silently drop the incomplete ones and leave every
+        # later row attributed to the wrong residue, so instead we keep all rows
+        # and return the mask as `observed`. This mirrors upstream's
+        # --conditional_probs_only, which saves log_p for all rows plus the mask.
         log_probs_np = log_probs[0].cpu().numpy()  # [L_padded, 21]
         mask_np = mask[0].cpu().numpy()  # [L_padded]
+        log_probs_parsed = log_probs_np[:n_parsed]  # [L_parse, 21]
+        observed = mask_np[:n_parsed] > 0  # [L_parse]
 
-        # Get only valid (non-padded) positions
-        valid_indices = mask_np > 0
-        log_probs_valid = log_probs_np[valid_indices]  # [L, 21]
-
-        # Build residue info from chain letters and positions
-        # letter_list_list[0] contains the chain letters in order
-        chain_letters = letter_list_list[0]
-        residue_info = []
-
-        # Track position within each chain
-        pos_in_protein = 0
-        for chain_letter in chain_letters:
-            chain_seq = protein[f"seq_chain_{chain_letter}"]
-            chain_length = len(chain_seq)
-            for res_idx in range(chain_length):
-                if pos_in_protein < len(log_probs_valid):
-                    residue_info.append(
-                        ResidueInfo(chain=chain_letter, residue_idx=res_idx + 1)
-                    )
-                pos_in_protein += 1
+        # Build residue info from chain letters and positions. One entry per parsed
+        # residue, so that residue_info[i] describes log_probs_parsed[i].
+        residue_info = [
+            ResidueInfo(chain=chain_letter, residue_idx=res_idx + 1)
+            for chain_letter in chain_letters
+            for res_idx in range(len(protein[f"seq_chain_{chain_letter}"]))
+        ]
 
         mode = "unconditional" if unconditional else "conditional"
         logger.debug(
-            "Computed %s log probabilities for %d residues",
+            "Computed %s log probabilities for %d residues (%d observed)",
             mode,
             len(residue_info),
+            int(observed.sum()),
         )
 
         return ConditionalProbsResult(
             protein_name=name_,
             model_name=self.model_name,
-            log_probs=log_probs_valid,
+            log_probs=log_probs_parsed,
+            observed=observed,
+            native_seq=native_seq,
             residue_info=residue_info,
             mode=mode,
         )

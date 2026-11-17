@@ -6,6 +6,8 @@ if weights are not available.
 
 from __future__ import annotations
 
+import math
+
 import numpy as np
 import pytest
 
@@ -159,6 +161,8 @@ class TestConditionalProbsResultMethods:
             protein_name="test_protein",
             model_name="v_48_020",
             log_probs=log_probs,
+            observed=np.array([True, False]),
+            native_seq="AX",
             residue_info=residue_info,
             mode="conditional",
         )
@@ -178,29 +182,36 @@ class TestConditionalProbsResultMethods:
         headers = lines[1].split(",")
         assert headers[0] == "chain"
         assert headers[1] == "residue_idx"
-        assert len(headers) == 2 + 21  # chain, residue_idx, + 21 amino acids
+        assert headers[2] == "observed"
+        assert len(headers) == 3 + 21  # chain, residue_idx, observed, + 21 amino acids
 
         # Check amino acid columns match ALPHABET
         for i, aa in enumerate(ALPHABET):
-            assert headers[2 + i] == aa
+            assert headers[3 + i] == aa
 
         # Data rows
         assert len(lines) == 4  # header comment + headers + 2 data rows
         row1 = lines[2].split(",")
         assert row1[0] == "A"
         assert row1[1] == "1"
+        assert row1[2] == "true"
+        assert lines[3].split(",")[2] == "false"  # the unobserved row is flagged
 
     def test_to_npz_dict_structure(self, sample_result):
         """Test that to_npz_dict produces correct structure."""
         npz_dict = sample_result.to_npz_dict()
 
         assert "log_probs" in npz_dict
+        assert "observed" in npz_dict
+        assert "native_seq" in npz_dict
         assert "residue_info" in npz_dict
         assert "alphabet" in npz_dict
         assert "metadata" in npz_dict
 
         # Check shapes and types
         assert npz_dict["log_probs"].shape == (2, 21)
+        assert npz_dict["observed"].shape == (2,)
+        assert npz_dict["native_seq"] == "AX"
         assert len(npz_dict["residue_info"]) == 2
         assert npz_dict["alphabet"] == ALPHABET
 
@@ -218,3 +229,94 @@ class TestConditionalProbsResultMethods:
         assert residue_info.dtype.names == ("chain", "residue_idx")
         assert residue_info[0]["chain"] == "A"
         assert residue_info[0]["residue_idx"] == 1
+
+
+# A chain whose author numbering jumps 6 -> 9, with one residue missing its N.
+# parse_PDB inserts two placeholder rows across the gap, and featurize masks
+# those plus the incomplete residue: 14 parsed rows, of which 11 are usable.
+_GAPPED_SEQ3 = [
+    "ALA", "GLY", "LEU", "LYS", "GLU", "VAL",   # author numbering 1-6
+    "SER", "THR", "ILE", "ASP", "PHE", "ARG",   # author numbering 9-14
+]  # fmt: skip
+_GAP_ROWS = (6, 7)  # 0-based rows of the placeholders parse_PDB inserts
+# The residue missing its N is the last of _GAPPED_SEQ3, and lands two rows later
+# than its index in that list, because the placeholders are inserted before it.
+_INCOMPLETE_ROW = len(_GAPPED_SEQ3) - 1 + len(_GAP_ROWS)
+
+
+def _write_gapped_pdb(path) -> None:
+    """Write the structure described above, with plausible CA spacing."""
+    lines = []
+    serial = 1
+    for i, resname in enumerate(_GAPPED_SEQ3):
+        resseq = i + 1 if i < 6 else i + 3
+        # The last residue is missing N, which is what makes it unusable.
+        atoms = (
+            ("CA", "C", "O") if i == len(_GAPPED_SEQ3) - 1 else ("N", "CA", "C", "O")
+        )
+        cx, cy, cz = 3.8 * i, 2.0 * math.sin(i), 2.0 * math.cos(i)
+        for atom in atoms:
+            dx = {"N": -1.0, "C": 1.0, "O": 1.0}.get(atom, 0.0)
+            dy = 1.0 if atom == "O" else 0.0
+            lines.append(
+                f"ATOM  {serial:>5}  {atom:<3} {resname:>3} A{resseq:>4}    "
+                f"{cx + dx:8.3f}{cy + dy:8.3f}{cz:8.3f}  1.00  0.00"
+                f"          {atom[0]:>2}"
+            )
+            serial += 1
+    path.write_text("\n".join(["HEADER    GAPPED TEST STRUCTURE", *lines, "END", ""]))
+
+
+@pytest.mark.skipif(not weights_available(), reason="Model weights not available")
+class TestIncompleteStructures:
+    """Rows must stay in correspondence with the parsed structure.
+
+    Regression tests for a bug where rows with mask=0 were dropped from
+    `log_probs` while `residue_info` was rebuilt as a running 1..n count, so
+    every row after the first gap was attributed to the wrong residue. See
+    notes/2026_11_17__0001_conditional_probs_row_dropping.md.
+    """
+
+    @pytest.fixture
+    def gapped_pdb(self, tmp_path):
+        path = tmp_path / "gapped.pdb"
+        _write_gapped_pdb(path)
+        return path
+
+    def test_one_row_per_parsed_residue(self, gapped_pdb):
+        result = InferenceRunner(model_name="v_48_020").compute_probs(
+            pdb_path=gapped_pdb, seed=37
+        )
+
+        n_parsed = len(_GAPPED_SEQ3) + len(_GAP_ROWS)
+        assert result.log_probs.shape == (n_parsed, 21)
+        assert result.observed.shape == (n_parsed,)
+        assert len(result.residue_info) == n_parsed
+        assert len(result.native_seq) == n_parsed
+
+    def test_unusable_rows_are_flagged_in_place(self, gapped_pdb):
+        result = InferenceRunner(model_name="v_48_020").compute_probs(
+            pdb_path=gapped_pdb, seed=37
+        )
+
+        unobserved = {i for i, ok in enumerate(result.observed) if not ok}
+        assert unobserved == {*_GAP_ROWS, _INCOMPLETE_ROW}
+
+    def test_native_seq_marks_the_gap(self, gapped_pdb):
+        result = InferenceRunner(model_name="v_48_020").compute_probs(
+            pdb_path=gapped_pdb, seed=37
+        )
+
+        # The placeholder rows are X; every other row keeps its residue, including the
+        # one the model could not use.
+        assert result.native_seq == "AGLKEVXXSTIDFR"
+
+    def test_residue_info_keeps_author_numbering_order(self, gapped_pdb):
+        result = InferenceRunner(model_name="v_48_020").compute_probs(
+            pdb_path=gapped_pdb, seed=37
+        )
+
+        # residue_idx is still a running per-chain index rather than author numbering,
+        # but it must now cover every parsed row without skipping.
+        assert [r.residue_idx for r in result.residue_info] == list(range(1, 15))
+        assert {r.chain for r in result.residue_info} == {"A"}

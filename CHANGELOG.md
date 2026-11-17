@@ -5,6 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Fixed
+
+- **`compute_probs` no longer drops rows, and no longer mislabels the rest.** Residues whose
+  backbone is incomplete (any of N, CA, C, O missing), including the placeholder rows
+  `parse_PDB` inserts across gaps in author numbering, were removed from `log_probs` while
+  `residue_info` was rebuilt as a running `1..n` count. Every row after the first such
+  residue was therefore attributed to the wrong residue, and the result carried no way to
+  detect it. Affects any structure with a numbering gap or an incomplete residue;
+  single-chain predicted structures with complete backbones were unaffected. Upstream
+  ProteinMPNN's `--conditional_probs_only` never had this problem: it emits every row and
+  ships the mask alongside. See
+  `notes/2026_11_17__0001_conditional_probs_row_dropping.md`.
+
+### Changed
+
+- **Breaking:** `ConditionalProbsResult` now has one row per *parsed* residue and gains two
+  required fields: `observed` (`bool[L]`, the mask the model used) and `native_seq` (the
+  parsed sequence, `X` on unobserved rows). Log probabilities on unobserved rows are passed
+  through rather than NaN-ed, matching upstream, so **mask with `observed` before use**.
+- **Breaking:** `to_csv` gains an `observed` column (third, before the alphabet), and
+  `to_npz_dict` gains `observed` and `native_seq` keys.
+- `parse_PDB_biounits` now parses with gemmi, with the line-based and biopython
+  implementations kept alongside it for comparison.
+
+### Known limitations
+
+- `ResidueInfo.residue_idx` is still a per-chain running index rather than author numbering
+  (`resseq`/`icode`), so a row cannot be mapped back to the PDB without re-parsing. Fixing
+  that means threading numbering out of `parse_PDB`, and is tracked separately.
+
 ## [0.1.0] - 2025-05-31
 
 ### Added
