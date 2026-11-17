@@ -122,8 +122,7 @@ class StructureDatasetPDB:
             StructureDatasetPDB: A dataset containing the parsed proteins and
                 their backbone coordinates.
         """
-        if not isinstance(pdb_dir, Path):
-            pdb_dir = Path(pdb_dir)
+        pdb_dir = Path(pdb_dir)
 
         # if os.path.isdir(pdb_dir):
         if not pdb_dir.is_dir():
