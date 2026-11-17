@@ -7,6 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `StructureDatasetPDB.from_pdb_file(path, chains=None)`, which parses one file instead of
+  every `*.pdb` beside it, optionally restricted to some of its chains.
+- `compute_probs(..., chain="A")` restricts parsing and output to one chain. Previously the
+  result always covered every chain in the file.
+- `compute_probs(..., n_draws=N)` draws N decoding orders **after a single seeding** and
+  averages the log probabilities, which is what upstream's `--num_seq_per_target N` does.
+  `ConditionalProbsResult.n_draws` records it. Note that draw *k* depends on the RNG state
+  left by draw *k-1*, so N draws under one seed are not reproducible by N separately
+  seeded single draws; `(seed, n_draws)` together identify the sample. Rejected for
+  unconditional mode with `backbone_noise=0`, where every draw would be identical.
+
 ### Fixed
 
 - **`compute_probs` no longer drops rows, and no longer mislabels the rest.** Residues whose
@@ -30,6 +43,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `to_npz_dict` gains `observed` and `native_seq` keys.
 - `parse_PDB_biounits` now parses with gemmi, with the line-based and biopython
   implementations kept alongside it for comparison.
+- `compute_probs` parses only the PDB it was given. It previously called
+  `from_pdb_dir(pdb_path.parent)` and parsed every structure in that directory, which is
+  slow and surprising when the directory is a shared or content-addressed store.
 
 ### Known limitations
 

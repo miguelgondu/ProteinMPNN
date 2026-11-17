@@ -141,6 +141,49 @@ class StructureDatasetPDB:
         # Construct dataset from pdb_dict_list
         return cls(pdb_dict_list, max_length=20_000)
 
+    @classmethod
+    def from_pdb_file(
+        cls, pdb_path: str | Path, chains: Sequence[str] | None = None
+    ) -> "StructureDatasetPDB":
+        """Parse a single pdb file, optionally restricted to some of its chains.
+
+        Prefer this over :meth:`from_pdb_dir` when only one structure is wanted:
+        the directory variant parses every ``*.pdb`` beside it, which is slow and
+        surprising when the directory is a shared or content-addressed store.
+
+        Input:
+            pdb_path (str | Path): The pdb file to parse.
+            chains (Sequence[str] | None): Chain names to keep, in the order
+                given. None keeps every chain, as from_pdb_dir does.
+
+        Output:
+            StructureDatasetPDB: A dataset holding the one parsed protein.
+
+        Raises:
+            ValueError: If the file does not exist, or if none of the requested
+                chains are present.
+        """
+        pdb_path = Path(pdb_path)
+        if not pdb_path.is_file():
+            raise ValueError(f"Could not find pdb file: {pdb_path}")
+
+        pdb_dict_list = parse_PDB(pdb_path, input_chain_list=list(chains) if chains else None)
+
+        if chains is not None and not any(d["num_of_chains"] for d in pdb_dict_list):
+            # Only on the error path: re-parse unrestricted, to name what is there.
+            available = sorted(
+                key.removeprefix("seq_chain_")
+                for d in parse_PDB(pdb_path)
+                for key in d
+                if key.startswith("seq_chain_")
+            )
+            raise ValueError(
+                f"None of the requested chains {list(chains)} are in {pdb_path.name}; "
+                f"it has {available}"
+            )
+
+        return cls(pdb_dict_list, max_length=20_000)
+
 
 def get_pdb_dataset(pdb_dir: str | Path) -> StructureDatasetPDB:
     """Parses pdb directory and returns a dataset containing coordinates

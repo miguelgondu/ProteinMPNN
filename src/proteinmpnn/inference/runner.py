@@ -229,6 +229,8 @@ class InferenceRunner:
         designable_res: str = "",
         unconditional: bool = False,
         seed: int | None = None,
+        chain: str | None = None,
+        n_draws: int = 1,
     ) -> ConditionalProbsResult:
         """Compute conditional or unconditional log probabilities per residue.
 
@@ -236,15 +238,36 @@ class InferenceRunner:
             pdb_path: Path to the input PDB file.
             designable_res: Comma-separated residue specifications for conditional
                 mode (e.g., "A10,A12-A15"). If empty and conditional mode,
-                all residues are included.
+                all residues are included. Must refer to `chain` if one is given.
             unconditional: If True, compute unconditional probabilities (no
                 sequence context). If False, compute conditional probabilities.
-            seed: Random seed for reproducibility.
+            seed: Random seed for reproducibility. Seeding happens once, before
+                any draw, so `n_draws` draws under one seed are not the same as
+                `n_draws` separately seeded single draws.
+            chain: Restrict parsing and output to this chain. None reads every
+                chain, concatenated in the order parse_PDB returns them.
+            n_draws: Number of decoding orders to draw and average over, in log
+                space, as upstream's `--num_seq_per_target` does. Conditional
+                mode only.
 
         Returns:
             ConditionalProbsResult containing log probabilities and residue info.
+
+        Raises:
+            ValueError: If `n_draws` < 1, if `n_draws` > 1 in unconditional mode
+                with no backbone noise (every draw would be identical), or if
+                `chain` is not in the structure.
         """
         pdb_path = Path(pdb_path)
+
+        if n_draws < 1:
+            raise ValueError(f"n_draws must be at least 1, got {n_draws}")
+        if n_draws > 1 and unconditional and self.backbone_noise == 0:
+            raise ValueError(
+                "n_draws > 1 is pointless for unconditional probabilities with "
+                "backbone_noise=0: there is no decoding order to draw, so every "
+                "draw would be identical. Use n_draws=1, or set backbone_noise."
+            )
 
         # Set seed for reproducibility
         if seed is not None:
@@ -258,8 +281,10 @@ class InferenceRunner:
         )
         config = design_input.to_config()
 
-        # Load protein structure
-        pdb_dataset = StructureDatasetPDB.from_pdb_dir(pdb_path.parent)
+        # Load protein structure. Only this file, and only the requested chain.
+        pdb_dataset = StructureDatasetPDB.from_pdb_file(
+            pdb_path, chains=[chain] if chain is not None else None
+        )
 
         # Find the protein matching our PDB
         protein = None
@@ -282,6 +307,7 @@ class InferenceRunner:
             config=config,
             unconditional=unconditional,
             all_residues=all_residues,
+            n_draws=n_draws,
         )
 
     def _compute_probs_internal(
@@ -290,6 +316,7 @@ class InferenceRunner:
         config: SingleStateConfig,
         unconditional: bool,
         all_residues: bool = False,
+        n_draws: int = 1,
     ) -> ConditionalProbsResult:
         """Internal method for computing probabilities.
 
@@ -299,6 +326,7 @@ class InferenceRunner:
             unconditional: If True, compute unconditional probabilities.
             all_residues: If True, compute probs for all residues regardless
                 of config.designable.
+            n_draws: Number of decoding orders to draw and average over.
 
         Returns:
             ConditionalProbsResult with log probabilities.
@@ -353,31 +381,48 @@ class InferenceRunner:
 
         name_ = batch[0]["name"]
 
-        # Compute probabilities
+        # Compute probabilities.
+        #
+        # With n_draws > 1 we draw that many decoding orders *after a single
+        # seeding* and average the log probabilities, which is what upstream's
+        # --num_seq_per_target does (it concatenates the draws and leaves the
+        # mean to the consumer). Draw k therefore depends on the RNG state left
+        # by draw k-1, so this is not reproducible by re-seeding per draw.
         with torch.no_grad():
             if unconditional:
                 # Unconditional: no sequence context
-                log_probs = self.model.unconditional_probs(
-                    X,
-                    mask,
-                    residue_idx,
-                    chain_encoding_all,
-                )
+                draws = [
+                    self.model.unconditional_probs(
+                        X,
+                        mask,
+                        residue_idx,
+                        chain_encoding_all,
+                    )
+                    for _ in range(n_draws)
+                ]
             else:
                 # Conditional: use sequence context
                 # Use chain_M * chain_M_pos as the mask for which positions to compute
                 # When all_residues=True, both should be all 1s
                 design_mask = chain_M * chain_M_pos
-                randn = torch.randn(chain_M.shape, device=X.device)
-                log_probs = self.model.conditional_probs(
-                    X,
-                    S,
-                    mask,
-                    design_mask,
-                    residue_idx,
-                    chain_encoding_all,
-                    randn,
-                )
+                draws = []
+                for _ in range(n_draws):
+                    randn = torch.randn(chain_M.shape, device=X.device)
+                    draws.append(
+                        self.model.conditional_probs(
+                            X,
+                            S,
+                            mask,
+                            design_mask,
+                            residue_idx,
+                            chain_encoding_all,
+                            randn,
+                        )
+                    )
+
+            # Mean in log space, i.e. a geometric mean of the probabilities,
+            # matching `log_p.mean(axis=0)` in upstream's consumers.
+            log_probs = torch.stack(draws).mean(dim=0) if n_draws > 1 else draws[0]
 
         # The native sequence as parsed, which is what defines the row space below.
         # parse_PDB writes "-" for the placeholder rows it inserts across gaps in author
@@ -425,6 +470,7 @@ class InferenceRunner:
             log_probs=log_probs_parsed,
             observed=observed,
             native_seq=native_seq,
+            n_draws=n_draws,
             residue_info=residue_info,
             mode=mode,
         )

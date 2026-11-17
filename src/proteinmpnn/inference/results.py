@@ -169,6 +169,7 @@ class ConditionalProbsResult(BaseModel):
         log_probs: Log probabilities array of shape [L, 21].
         observed: Boolean array of shape [L]; False where the backbone was unusable.
         native_seq: The parsed sequence, length L, with "X" on unobserved rows.
+        n_draws: How many decoding orders were drawn and averaged, in log space.
         residue_info: List of ResidueInfo for each position.
         mode: Whether the probabilities are conditional or unconditional.
     """
@@ -180,6 +181,7 @@ class ConditionalProbsResult(BaseModel):
     log_probs: np.ndarray  # Shape [L, 21]
     observed: np.ndarray  # Shape [L], bool
     native_seq: str  # Length L
+    n_draws: int = 1
     residue_info: list[ResidueInfo]
     mode: Literal["conditional", "unconditional"]
 
@@ -193,7 +195,8 @@ class ConditionalProbsResult(BaseModel):
 
         # Header comment with metadata
         lines.append(
-            f"# protein={self.protein_name}, model={self.model_name}, mode={self.mode}"
+            f"# protein={self.protein_name}, model={self.model_name}, "
+            f"mode={self.mode}, n_draws={self.n_draws}"
         )
 
         # Column headers. `observed` is included because the log probabilities on
@@ -235,5 +238,6 @@ class ConditionalProbsResult(BaseModel):
                 "protein_name": self.protein_name,
                 "model_name": self.model_name,
                 "mode": self.mode,
+                "n_draws": self.n_draws,
             },
         }

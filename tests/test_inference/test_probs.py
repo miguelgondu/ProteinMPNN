@@ -264,7 +264,8 @@ def _write_gapped_pdb(path) -> None:
                 f"          {atom[0]:>2}"
             )
             serial += 1
-    path.write_text("\n".join(["HEADER    GAPPED TEST STRUCTURE", *lines, "END", ""]))
+    header = "HEADER    GAPPED TEST STRUCTURE"
+    path.write_text("\n".join([header, *lines, "END", ""]))
 
 
 @pytest.mark.skipif(not weights_available(), reason="Model weights not available")
@@ -320,3 +321,124 @@ class TestIncompleteStructures:
         # but it must now cover every parsed row without skipping.
         assert [r.residue_idx for r in result.residue_info] == list(range(1, 15))
         assert {r.chain for r in result.residue_info} == {"A"}
+
+
+def _write_two_chain_pdb(path) -> None:
+    """Two chains, A (4 residues) and B (3), with distinguishable sequences."""
+    lines = []
+    serial = 1
+    for chain, seq3, start in (
+        ("A", ["ALA", "GLY", "LEU", "LYS"], 1),
+        ("B", ["TRP", "TYR", "PHE"], 10),
+    ):
+        for i, resname in enumerate(seq3):
+            cx = 3.8 * i + (0.0 if chain == "A" else 40.0)
+            cy, cz = 2.0 * math.sin(i), 2.0 * math.cos(i)
+            for atom in ("N", "CA", "C", "O"):
+                dx = {"N": -1.0, "C": 1.0, "O": 1.0}.get(atom, 0.0)
+                dy = 1.0 if atom == "O" else 0.0
+                lines.append(
+                    f"ATOM  {serial:>5}  {atom:<3} {resname:>3} "
+                    f"{chain}{start + i:>4}    "
+                    f"{cx + dx:8.3f}{cy + dy:8.3f}{cz:8.3f}  1.00  0.00"
+                    f"          {atom[0]:>2}"
+                )
+                serial += 1
+    path.write_text(
+        "\n".join(["HEADER    TWO CHAIN TEST STRUCTURE", *lines, "END", ""])
+    )
+
+
+@pytest.mark.skipif(not weights_available(), reason="Model weights not available")
+class TestChainSelection:
+    """`chain=` restricts both parsing and output to one chain."""
+
+    @pytest.fixture
+    def two_chain_pdb(self, tmp_path):
+        path = tmp_path / "two_chain.pdb"
+        _write_two_chain_pdb(path)
+        return path
+
+    def test_all_chains_by_default(self, two_chain_pdb):
+        result = InferenceRunner(model_name="v_48_020").compute_probs(
+            pdb_path=two_chain_pdb, seed=37
+        )
+
+        assert result.native_seq == "AGLKWYF"
+        assert {r.chain for r in result.residue_info} == {"A", "B"}
+
+    def test_single_chain_is_parsed_alone(self, two_chain_pdb):
+        result = InferenceRunner(model_name="v_48_020").compute_probs(
+            pdb_path=two_chain_pdb, seed=37, chain="B"
+        )
+
+        assert result.native_seq == "WYF"
+        assert result.log_probs.shape == (3, 21)
+        assert {r.chain for r in result.residue_info} == {"B"}
+
+    def test_missing_chain_names_what_is_there(self, two_chain_pdb):
+        with pytest.raises(ValueError, match=r"\['A', 'B'\]"):
+            InferenceRunner(model_name="v_48_020").compute_probs(
+                pdb_path=two_chain_pdb, seed=37, chain="C"
+            )
+
+
+@pytest.mark.skipif(not weights_available(), reason="Model weights not available")
+class TestNDraws:
+    """`n_draws` averages several decoding orders under one seeding."""
+
+    @pytest.fixture
+    def pdb_path(self):
+        pdb = DATA_DIR / "6MRR.pdb"
+        if not pdb.exists():
+            pytest.skip(f"Test PDB not found: {pdb}")
+        return pdb
+
+    def test_one_draw_is_the_default_and_unchanged(self, pdb_path):
+        runner = InferenceRunner(model_name="v_48_020")
+        default = runner.compute_probs(pdb_path=pdb_path, seed=37)
+        explicit = runner.compute_probs(pdb_path=pdb_path, seed=37, n_draws=1)
+
+        assert default.n_draws == 1
+        np.testing.assert_array_equal(default.log_probs, explicit.log_probs)
+
+    def test_averaging_changes_the_result_and_is_reproducible(self, pdb_path):
+        runner = InferenceRunner(model_name="v_48_020")
+        one = runner.compute_probs(pdb_path=pdb_path, seed=37, n_draws=1)
+        ten = runner.compute_probs(pdb_path=pdb_path, seed=37, n_draws=10)
+        ten_again = runner.compute_probs(pdb_path=pdb_path, seed=37, n_draws=10)
+
+        assert ten.n_draws == 10
+        assert ten.log_probs.shape == one.log_probs.shape
+        # Averaging over draws is not the same as the first draw...
+        assert not np.allclose(ten.log_probs, one.log_probs)
+        # ...but is reproducible from the same seed.
+        np.testing.assert_allclose(ten.log_probs, ten_again.log_probs)
+
+    def test_draws_share_one_seeding(self, pdb_path):
+        """Ten draws under one seed differ from ten separately seeded draws.
+
+        This is why (seed, n_draws) rather than seed alone identifies the sample.
+        """
+        runner = InferenceRunner(model_name="v_48_020")
+        ten = runner.compute_probs(pdb_path=pdb_path, seed=37, n_draws=10)
+        reseeded = np.mean(
+            [
+                runner.compute_probs(pdb_path=pdb_path, seed=37, n_draws=1).log_probs
+                for _ in range(10)
+            ],
+            axis=0,
+        )
+
+        assert not np.allclose(ten.log_probs, reseeded)
+
+    def test_rejects_invalid_n_draws(self, pdb_path):
+        runner = InferenceRunner(model_name="v_48_020")
+
+        with pytest.raises(ValueError, match="at least 1"):
+            runner.compute_probs(pdb_path=pdb_path, seed=37, n_draws=0)
+
+        with pytest.raises(ValueError, match="pointless for unconditional"):
+            runner.compute_probs(
+                pdb_path=pdb_path, seed=37, unconditional=True, n_draws=10
+            )
